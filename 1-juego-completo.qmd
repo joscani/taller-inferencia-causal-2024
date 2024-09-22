@@ -10,8 +10,20 @@ format:
     code-link: true
     code-summary: "Show the code"
     code-tools: true 
-
+resources:
+  - data
+  - docs/web_user
 engine: knitr
+webr:
+  packages:
+    - dplyr
+    - cli
+    - ggplot2
+    - skimr
+    - DT
+    - ggdag
+    - broom
+    - ggokabeito
 knitr:
   opts_chunk:
     out.width: 80%
@@ -35,11 +47,13 @@ library(tidyverse)
 
 Pasos en el análisis causal.
 
+
+
+
 ```{webr}
-fit = lm(mpg ~ am, data = mtcars)
-summary(fit)
-plot(fit)
+list.files("data")
 ```
+
 
 1. Definir la pregunta causal
 2. Especificar las asunciones, una forma es con un diagrama causal
@@ -47,4 +61,124 @@ plot(fit)
 4. Diagnosticar el modelo
 5. Estimar el efecto causal
 6. Análisis de sensibilidad 
+
+
+## Datos
+
+```{webr}
+net_data <-  read.csv("data/net_data.csv")
+```
+
+
+
+## Especificar asunciones
+
+
+```{webr}
+
+skimr::skim(net_data |> select((-id)))
+
+DT::datatable(net_data)
+
+```
+
+
+```{webr}
+net_data |>
+  ggplot(aes(malaria_risk, fill = net)) +
+  geom_density(color = NA, alpha = .8)
+```
+
+
+```{webr}
+net_data |>
+  group_by(net) |>
+  summarize(malaria_risk = mean(malaria_risk))
+```
+
+
+```{webr}
+# con una regresión obtenemos lo mismo
+net_data |>
+  lm(malaria_risk ~ net, data = _) |>
+  tidy()
+
+net_data |>
+  lm(malaria_risk ~  0 + net, data = _) |>
+  tidy()
+
+```
+
+
+__Sin webr__
+
+_Los dags tiran de librería `V8` y en webr parece que no va bien.
+
+```{r}
+#| warning: false
+#| message: false
+
+library(tidyverse)
+library(ggdag)
+library(ggokabeito)
+net_data <-  read_csv(here::here("data/net_data.csv"))
+mosquito_dag <- dagify(
+  malaria_risk ~ net + income + health + temperature + resistance,
+  net ~ income + health + temperature + eligible + household,
+  eligible ~ income + household,
+  health ~ income,
+  exposure = "net",
+  outcome = "malaria_risk",
+  coords = list(
+    x = c(
+      malaria_risk = 7,
+      net = 3,
+      income = 4,
+      health = 5,
+      temperature = 6,
+      resistance = 8.5,
+      eligible = 2,
+      household = 1
+    ),
+    y = c(
+      malaria_risk = 2,
+      net = 2,
+      income = 3,
+      health = 1,
+      temperature = 3,
+      resistance = 2,
+      eligible = 3,
+      household = 2
+    )
+  ),
+  labels = c(
+    malaria_risk = "Risk of malaria",
+    net = "Mosquito net",
+    income = "Income",
+    health = "Health",
+    temperature = "Nighttime temperatures",
+    resistance = "Insecticide resistance",
+    eligible = "Eligible for program",
+    household = "Number in the household"
+  )
+)
+
+mosquito_dag |>
+  tidy_dagitty() |>
+  node_status() |>
+  ggplot(
+    aes(x, y, xend = xend, yend = yend, color = status)
+  ) +
+  geom_dag_edges() +
+  geom_dag_point() +
+  geom_dag_label(color = "black") +
+  # geom_dag_label_repel() +
+  scale_color_okabe_ito(na.value = "grey90") +
+  theme_dag() +
+  theme(legend.position = "none") +
+  coord_cartesian(clip = "off")
+```
+
+
+`
 
