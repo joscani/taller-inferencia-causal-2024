@@ -58,9 +58,6 @@ Pasos en el análisis causal.
 
 
 
-```{webr}
-list.files("data")
-```
 
 
 1. Definir la pregunta causal
