@@ -1,0 +1,8 @@
+---
+title: "Taller inferencia causal"
+format: html
+---
+
+
+
+[Slides](Indice_slides)

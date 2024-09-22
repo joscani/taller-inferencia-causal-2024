@@ -1,0 +1,50 @@
+---
+title: "El juego completo"
+format: 
+  live-html: 
+    fig-height: 5
+    fig-dpi: 300
+    fig-width: 8
+    fig-align: center
+    code-fold: true
+    code-link: true
+    code-summary: "Show the code"
+    code-tools: true 
+
+engine: knitr
+knitr:
+  opts_chunk:
+    out.width: 80%
+    fig.showtext: TRUE
+    comment: "#>"
+---
+{{< include ./_extensions/r-wasm/live/_knitr.qmd >}}
+
+
+Veamos un ejemplo completo. No hace falta entenderlo todo. 
+Iremos viendo luego cada parte. 
+
+El ejemplo viene de [aquí](https://www.r-causal.org/chapters/02-whole-game)
+
+```{r}
+#| include: false
+source(here::here("R/ggdag-mask.R"))
+source(here::here("R/setup.R"))
+library(tidyverse)
+```
+
+Pasos en el análisis causal.
+
+```{webr}
+fit = lm(mpg ~ am, data = mtcars)
+summary(fit)
+plot(fit)
+```
+
+1. Definir la pregunta causal
+2. Especificar las asunciones, una forma es con un diagrama causal
+3. Modelar las asunciones
+4. Diagnosticar el modelo
+5. Estimar el efecto causal
+6. Análisis de sensibilidad 
+
