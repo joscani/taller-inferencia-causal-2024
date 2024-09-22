@@ -10,6 +10,8 @@ format:
     code-link: true
     code-summary: "Show the code"
     code-tools: true 
+    toc: true 
+    toc-depth: 2 
 resources:
   - data
   - docs/web_user
@@ -17,13 +19,17 @@ engine: knitr
 webr:
   packages:
     - dplyr
+    - purrr
     - cli
     - ggplot2
     - skimr
     - DT
-    - ggdag
     - broom
     - ggokabeito
+    - rsample
+    - halfmoon
+  repos:
+    - https://r-lib.r-universe.dev
 knitr:
   opts_chunk:
     out.width: 80%
@@ -39,10 +45,12 @@ Iremos viendo luego cada parte.
 El ejemplo viene de [aquí](https://www.r-causal.org/chapters/02-whole-game)
 
 ```{r}
-#| include: false
+#| include: true
 source(here::here("R/ggdag-mask.R"))
 source(here::here("R/setup.R"))
 library(tidyverse)
+library(ggdag)
+library(broom)
 ```
 
 Pasos en el análisis causal.
@@ -66,12 +74,17 @@ list.files("data")
 ## Datos
 
 ```{webr}
+library(dplyr)
+library(ggplot2)
+library(skimr)
+library(broom)
+library(halfmoon)
+
 net_data <-  read.csv("data/net_data.csv")
 ```
 
 
 
-## Especificar asunciones
 
 
 ```{webr}
@@ -81,6 +94,10 @@ skimr::skim(net_data |> select((-id)))
 DT::datatable(net_data)
 
 ```
+
+## Especificar cuestión causal
+
+* ¿El uso de la mosquitera reduce el riesgo de malaria?
 
 
 ```{webr}
@@ -109,10 +126,10 @@ net_data |>
 
 ```
 
+## Dibujar la asunciones
 
-__Sin webr__
 
-_Los dags tiran de librería `V8` y en webr parece que no va bien.
+El uso de diagramas causales no es imprescindible, pero ayuda a explicitar las asunciones. Estas asunciones son nuestro modelo de como funcionar las relaciones entre las variables, pero puede que no sean correctas. Siempre habría que chequear el conocimiento experto y confrontar con otras explicaciones. 
 
 ```{r}
 #| warning: false
@@ -163,7 +180,7 @@ mosquito_dag <- dagify(
   )
 )
 
-mosquito_dag |>
+p1 <- mosquito_dag |>
   tidy_dagitty() |>
   node_status() |>
   ggplot(
@@ -177,8 +194,581 @@ mosquito_dag |>
   theme_dag() +
   theme(legend.position = "none") +
   coord_cartesian(clip = "off")
+p1
+```
+
+## Modelar las asunciones 
+
+Dado el DAG anterior, vamos a utilizar una técnica conocida como _propensity score weighting_.  El objetivo de esta técnica es crear una pseudopoblación que _imite_ como habrían sido los datos si se hubiera hecho un RCT (Randomized Controlled Trial). 
+
+
+:::{.panel-tabset}
+
+### Código estático
+
+```{r}
+#| echo: TRUE
+propensity_model <- glm(
+  net ~ income + health + temperature,
+  data = net_data,
+  family = binomial()
+)
+
+```
+
+```{r}
+#| echo: TRUE
+head(predict(propensity_model, type = "response"))
+
+```
+```{r}
+#| echo: TRUE
+net_data_with_ipw <- net_data |>
+  mutate(
+    propensity_score = predict(propensity_model, type = "response")
+  ) |>
+  mutate(
+    ipw = ifelse(net_num == 1, 1 / propensity_score, 1 / (1 - propensity_score))
+  )
+```
+
+Vemos los ipw. 
+Si una observación ha caído en control pero tiene una probabilidad en el modelo de propensity score de 0.9, su peso es de 1 /(1-0.9) = `r 1 / (1-0.9)` . Es decir, este individuo se considera un muy buen _contrafactual_  para un individuo de iguales características que hubiera caido en tratamiento.
+
+```{r}
+
+net_data_with_ipw |>
+  filter(net_num == 0) |>
+  select(net,net_num, propensity_score, ipw) |>
+  arrange(desc(propensity_score)) |>
+  head()
+
+net_data_with_ipw |>
+  filter(net_num ==1) |>
+  arrange(propensity_score) |>
+  select(net,net_num, propensity_score, ipw) |>
+  head()
 ```
 
 
-`
+### Prueba tu mismo
+
+
+```{webr}
+propensity_model <- glm(
+  net ~ income + health + temperature,
+  data = net_data,
+  family = binomial()
+)
+
+head(predict(propensity_model, type = "response"))
+```
+
+
+__Copia la parte de obtener los peso ipw a partir de las predicciones__
+
+```{webr}
+net_data_with_ipw <- net_data |>
+  mutate(
+    propensity_score = predict(propensity_model, type = "response")
+  ) |>
+  mutate(
+    ipw = ifelse(net_num == 1, 1 / propensity_score, 1 / (1 - propensity_score))
+  )
+
+```
+
+:::
+
+
+## Diagnosticar las asunciones
+
+¿Qué es lo que ha cambiado al hacer el ipw?
+
+```{webr}
+library(halfmoon)
+
+net_data_with_ipw |> 
+  ggplot( aes(propensity_score)) +
+  geom_mirror_histogram(
+    aes(fill = net),
+    bins = 50
+  ) +
+  scale_y_continuous(labels = abs) +
+  labs(x = "propensity score")
+
+
+```
+
+```{webr}
+
+plot_df <- tidy_smd(
+  net_data_with_ipw,
+  c(income, health, temperature),
+  .group = net,
+  .wts = ipw
+)
+
+ggplot(
+  plot_df,
+  aes(
+    x = abs(smd),
+    y = variable,
+    group = method,
+    color = method
+  )
+) +
+  geom_love()
+```
+## Estimar el efecto causal
+
+
+### Usando ipw
+
+```{webr}
+net_data_with_ipw |>
+  lm(malaria_risk ~  net, data = _, weights = ipw) |>
+  tidy(conf.int = TRUE) |>
+  filter(term == "netTRUE")
+```
+Pero una vez se ha hecho el ipw, la varianza del estimador que da el modelo `lm` no es correcta, hay que calcularla usando otras técnicas, como estimadores robustos o bootstrap. Usaremos bootstrap
+
+
+```{webr}
+library(rsample)
+
+# todo el proceso
+fit_ipw <- function(split, ...) {
+  # get bootstrapped data sample with `rsample::analysis()`
+  .df <- analysis(split)
+
+  # fit propensity score model
+  propensity_model <- glm(
+    net ~ income + health + temperature,
+    data = .df,
+    family = binomial()
+  )
+
+  # calculate inverse probability weights
+  .df <-  .df |>
+  mutate(
+    propensity_score = predict(propensity_model, type = "response")
+  ) |>
+  mutate(
+    ipw = ifelse(net_num == 1, 1 / propensity_score, 1 / (1 - propensity_score))
+  )
+
+
+  # fit correctly bootstrapped ipw model
+  lm(malaria_risk ~ net, data = .df, weights = ipw) |>
+    tidy()
+}
+```
+
+
+```{webr}
+bootstrapped_net_data <- bootstraps(
+  net_data,
+  times = 1000,
+  # required to calculate CIs later
+  apparent = TRUE
+)
+
+bootstrapped_net_data
+```
+
+
+```{webr}
+#| timelimit: 0
+# En cada muestra ejecutamos el proceso completo
+
+ipw_results <- bootstrapped_net_data |>
+  mutate(boot_fits = map(splits, fit_ipw))
+
+ipw_results
+
+ipw_results$boot_fits[[1]]
+
+# pintamos los resultados
+```
+
+
+```{webr}
+
+ipw_results |>
+  mutate(
+    estimate = map_dbl(
+      boot_fits,
+      # pull the `estimate` for `netTRUE` for each fit
+      # \(.fit) .fit |>
+        function(x) {
+          x |>
+        filter(term == "netTRUE") |>
+        pull(estimate)
+          }
+    )
+  ) |>
+  ggplot(aes(estimate)) +
+  geom_histogram(fill = "#D55E00FF", color = "white", alpha = 0.8)
+```
+
+
+```{webr}
+boot_estimate <- ipw_results |>
+  # intervalo usando percentil
+  int_pctl(boot_fits, alpha = 0.01) |>
+  filter(term == "netTRUE")
+
+boot_estimate
+
+```
+
+### Usando reglas de Pearl
+
+Pensemos como cortar los caminos no causales
+
+```{r}
+p1
+```
+
+Pero la librería dagitty nos sirve para esto
+
+```{r}
+dagitty::adjustmentSets(mosquito_dag, effect = "total")
+```
+
+
+```{r}
+ggdag_adjustment_set(mosquito_dag, effect = "total")
+```
+
+
+```{webr}
+
+lm(malaria_risk ~ net + income + temperature + health, data = net_data) |>
+  tidy(conf.int = TRUE) |>
+  filter(term == "netTRUE")
+```
+
+:::{.panel-tabset}
+
+#### Solapamiento income
+
+```{r}
+
+net_data |>
+  ggplot(aes(income, fill = net)) +
+  geom_density(color = NA, alpha = .8)
+
+```
+
+#### Solapamiento temperature
+
+```{r}
+net_data |>
+  ggplot(aes(temperature, fill = net)) +
+  geom_density(color = NA, alpha = .8)
+
+```
+
+
+#### Solapamiento health
+
+```{r}
+net_data |>
+  ggplot(aes(health , fill = net)) +
+  geom_density(color = NA, alpha = .8)
+```
+
+
+:::
+
+### Modelo bayesiano
+
+
+```{r}
+library(cmdstanr)
+library(brms)
+library(posterior) # para cosas como rvar
+
+options(brms.backend = "cmdstanr")
+
+
+```
+
+
+```{r}
+m_bayesian <- brm(
+  malaria_risk ~ net + income + temperature + health ,
+  data = net_data,
+  seed = 48,
+  chains = 4,
+  iter = 4000,
+  warmup = 1000,
+  cores = 4, 
+  file = here::here("brms_stan_models/net_1"),
+  file_refit = "on_change"
+  
+)
+
+# hqy que evitar el exceso de decimales dando impresión de falsa exactitud
+m_bayesian
+```
+
+
+```{r}
+round(posterior_summary(m_bayesian, variable = "b_netTRUE"), 2)
+```
+
+
+```{r}
+m_bayesian |>
+  as_tibble() |>
+  ggplot() +
+  ggdist::stat_halfeye(
+    aes( x = b_netTRUE),
+    fill = "darkred",
+    alpha = 0.4)  +
+  ggdist::theme_ggdist()
+
+```
+
+## Análisis de sensibilidad
+
+Y si hubiera una variable de confusión no observada?. Si fuera un RCT, el mismo mecanismo de aleatorización nos _protege_ frente a esas variables, pero no en un estudio observacional. 
+
+Imaginemos que existe una variable de confusión que es resistencia genética de la población a la malaria.
+
+Suponemos lo siguiente. 
+
+1. Está asociada con la variable respuesta, porque en media la gente con resistencia genética tiene una reducción de riesgo alrededor de 10.
+2. Está asociada con la variable de tratamiento, puesto que entre los que usan mosquiteras, el 26 % tienen esta resistencia. Pero entre los que no usan mosquiteras, solo el 5% la tienen. 
+
+
+Con la librería [`tipr`](https://cran.r-project.org/web/packages/tipr/index.html) se puede inferir cuál sería el efecto si existiera ese confounder no observado.
+
+
+
+```{r}
+# repito fuera de webr
+
+library(rsample)
+
+# todo el proceso
+fit_ipw <- function(split, ...) {
+  # get bootstrapped data sample with `rsample::analysis()`
+  .df <- analysis(split)
+
+  # fit propensity score model
+  propensity_model <- glm(
+    net ~ income + health + temperature,
+    data = .df,
+    family = binomial()
+  )
+
+  # calculate inverse probability weights
+  .df <-  .df |>
+  mutate(
+    propensity_score = predict(propensity_model, type = "response")
+  ) |>
+  mutate(
+    ipw = ifelse(net_num == 1, 1 / propensity_score, 1 / (1 - propensity_score))
+  )
+
+
+  # fit correctly bootstrapped ipw model
+  lm(malaria_risk ~ net, data = .df, weights = ipw) |>
+    tidy()
+}
+
+bootstrapped_net_data <- bootstraps(
+  net_data,
+  times = 1000,
+  # required to calculate CIs later
+  apparent = TRUE
+)
+
+ipw_results <- bootstrapped_net_data |>
+  mutate(boot_fits = map(splits, fit_ipw))
+
+boot_estimate <- ipw_results |>
+  # intervalo usando percentil
+  int_pctl(boot_fits, alpha = 0.01) |>
+  filter(term == "netTRUE")
+
+```
+
+
+
+
+```{r}
+library(tipr)
+adjusted_estimates <- boot_estimate |>
+  select(.estimate, .lower, .upper) |>
+  unlist() |>
+  adjust_coef_with_binary(
+    exposed_confounder_prev = 0.26,
+    unexposed_confounder_prev = 0.05,
+    confounder_outcome_effect = -10
+  )
+
+adjusted_estimates
+
+
+
+```
+
+## Verdadero DAG
+
+Y después de todo, como los datos son simulados sabemos que existe una variable de confusión 
+
+```{r}
+mosquito_dag_full <- dagify(
+  malaria_risk ~ net + income + health + temperature + insecticide_resistance + genetic_resistance,
+  net ~ income + health + temperature + eligible + household + genetic_resistance,
+  eligible ~ income + household,
+  health ~ income,
+  exposure = "net",
+  outcome = "malaria_risk",
+  coords = list(
+    x = c(
+      malaria_risk = 7,
+      net = 3,
+      income = 4,
+      health = 5,
+      temperature = 6,
+      insecticide_resistance = 8.5,
+      eligible = 2,
+      household = 1,
+      genetic_resistance = 8.5
+    ),
+    y = c(
+      malaria_risk = 2,
+      net = 2,
+      income = 3,
+      health = 1,
+      temperature = 3,
+      insecticide_resistance = 2,
+      eligible = 3,
+      household = 2,
+      genetic_resistance = 1
+    )
+  ),
+  labels = c(
+    malaria_risk = "Risk of malaria",
+    net = "Mosquito net",
+    income = "Income",
+    health = "Health",
+    temperature = "Nighttime temperatures",
+    insecticide_resistance = "Insecticide resistance",
+    eligible = "Eligible for program",
+    household = "Number in household",
+    genetic_resistance = "Malaria resistance"
+  )
+)
+
+mosquito_dag_full |>
+  tidy_dagitty() |>
+  node_status() |>
+  ggplot(
+    aes(x, y, xend = xend, yend = yend, color = status)
+  ) +
+  geom_dag_edges() +
+  geom_dag_point() +
+  geom_dag_label_repel() +
+  scale_color_okabe_ito(na.value = "grey90") +
+  theme_dag() +
+  theme(legend.position = "none") +
+  coord_cartesian(clip = "off")
+```
+
+
+```{r}
+net_data_full <- read.csv(here::here("data/net_data_full.csv"))
+glimpse(net_data_full)
+```
+
+
+```{r}
+fit_ipw_full <- function(split, ...) {
+  # get bootstrapped data sample with `rsample::analysis()`
+  .df <- analysis(split)
+
+  # fit propensity score model
+  propensity_model <- glm(
+    net ~ income + health + temperature + genetic_resistance,,
+    data = .df,
+    family = binomial()
+  )
+
+  # calculate inverse probability weights
+  .df <-  .df |>
+  mutate(
+    propensity_score = predict(propensity_model, type = "response")
+  ) |>
+  mutate(
+    ipw = ifelse(net_num == 1, 1 / propensity_score, 1 / (1 - propensity_score))
+  )
+
+
+  # fit correctly bootstrapped ipw model
+  lm(malaria_risk ~ net, data = .df, weights = ipw) |>
+    tidy()
+}
+```
+
+```{r}
+bootstrapped_net_data_full <- bootstraps(
+  net_data_full,
+  times = 1000,
+  # required to calculate CIs later
+  apparent = TRUE
+)
+
+ipw_results_full <- bootstrapped_net_data_full |>
+  mutate(boot_fits = map(splits, fit_ipw_full))
+
+boot_estimate_full <- ipw_results_full |>
+  # calculate T-statistic-based CIs
+  int_t(boot_fits) |>
+  filter(term == "netTRUE")
+
+boot_estimate_full
+```
+
+
+```{r}
+
+m_bayesian_full <- brm(
+  malaria_risk ~ net + income + temperature + health + genetic_resistance ,
+  data = net_data_full,
+  seed = 48,
+  chains = 4,
+  iter = 4000,
+  warmup = 1000,
+  cores = 4, 
+  file = here::here("brms_stan_models/net_2"),
+  file_refit = "on_change"
+  
+)
+
+summary(m_bayesian_full)
+
+round(posterior_summary(m_bayesian_full, variable = "b_netTRUE"), 2)
+
+posteriores <-  as_tibble(m_bayesian_full)
+
+post_rvars <- as_draws_rvars(posteriores)
+
+post_rvars$b_netTRUE |>
+  enframe() |>
+  ggplot() +
+  ggdist::stat_halfeye(
+    aes( xdist = value),
+    fill = "darkred",
+    alpha = 0.4)  +
+  ggdist::theme_ggdist()
+
+
+```
 
