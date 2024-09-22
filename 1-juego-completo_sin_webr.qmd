@@ -14,7 +14,6 @@ format:
     toc-depth: 2 
 engine: knitr
 execute:
-  echo: false
   warning: false
   message: false
 knitr:
