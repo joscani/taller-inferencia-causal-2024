@@ -62,6 +62,44 @@ net_data <-  read.csv(here::here("data/net_data.csv"))
 ```
 
 
+`id`
+
+:   ID
+
+`net` y `net_num`
+
+:   Indican si se usa mosquitera (1) o no (0)
+
+`malaria_risk`
+
+:   Riesgo de malaria 0-100
+
+`income`
+
+:   ingresos, medida en dólares
+
+`health`
+
+:   Puntuación en salud de  0--100
+
+`household`
+
+:   Número de personas en el hogar
+
+`eligible`
+
+:   Indica si el hogar es eligible para programa de mosquitera gratis.
+
+`temperature`
+
+:   La temperatura media por las noches, en Celsius
+
+`resistance`
+
+:   Resistencia de los mosquitos locales al insecticida. Escala de 0--100, valores 
+altos indican mayor resistencia 
+
+
 ```{r}
 
 skimr::skim(net_data |> select((-id)))
@@ -70,7 +108,7 @@ DT::datatable(net_data)
 
 ```
 
-## Especificar cuestión causal
+Esp## Especificar cuestión causal
 
 * ¿El uso de la mosquitera reduce el riesgo de malaria?
 
