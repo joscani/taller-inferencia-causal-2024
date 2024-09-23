@@ -1,0 +1,108 @@
+---
+title: "Taller inferencia causal"
+author: "José Luis Cañadas-Reche"
+date: "2024-09-21 (updated: `r Sys.Date()`)"
+#format:  revealjs
+format: "kakashi-revealjs"
+---
+
+## Preguntas causales {background-color="#23373B"}
+
+1.  Efecto de las causas. El efecto de una intervención.
+2.  Causas de los efectos. Qué ha podido ser la causa de esto?
+
+## El juego completo. {background-color="#23373B"}
+
+-   [Ejemplo interactivo](1-juego-completo.html)
+
+-   [Ejemplo estático](1-juego-completo_sin_webr.html)
+
+## Potential outcomes {background-color="#23373B"}
+
+1.  Y(1) y Y(0) son los resultados potenciales de un individuo si hubiera recibido el tratamiento o no.
+2.  Y(1) no es observable si no se ha recibido el tratamiento.
+3.  Y(0) no es observable si se ha recibido el tratamiento.
+
+##  {background-color="#23373B"}
+
+![Potential outcome. Ejemplo libro Regression an other Stories](Ejemplo_inicial_libro_ROS.png)
+
+## Supuestos y asunciones inferencia causal {background-color="#23373B"}
+
+<ol>
+
+<li>Consistencia o SUTVA: Qué realmente el análisis conteste a la pregunta causal</li>
+
+<li>Intercambiabilidad</li>
+
+<li>Positividad:</li>
+
+<li>Se podría resumir como "peras con peras" y "manzanas con manzanas".</li>
+
+</ol>
+
+## RCT's {background-color="#23373B"}
+
+::: columns
+::: {.column width="50%"}
+1.  El gold standard
+2.  Pero no siempre es posible
+3.  No siempre es ético
+:::
+
+::: {.column width="50%"}
+4.  Las técnicas como ipw mejoran precisión en rct
+5.  El DAG y las reglas de Pearl ayudan también
+:::
+:::
+
+## Ciencia antes que estadística {background-color="#23373B"}
+
+1.  El DAG nos ayuda. Hacer explícitas las relaciones
+2.  Estructuras en el DAG. Forks, mediators, colliders
+3.  Cuarteto causal
+4.  Ejemplo buenos y malos controles
+
+-   \[Enlace ejemplo\]
+-   \[Enlace ejemplo estático\]
+
+## Técnicas {background-color="#23373B"}
+
+Son sólo técnicas, lo importante es lo de antes.Queremos acercarnos a lo que es un RCT, qué se puede hacer desde perspectiva clásica frecuentista.
+
+::: columns
+::: {.column width="50%"}
+-   Identificar variables con reglas de Pearl, uso de daggitty
+-   Propensity Score Matching
+-   Inverse Probability Weighting
+:::
+
+::: {.column width="50%"}
+-   Meta-learners
+-   G-estimation ( esto nos sirve en frecuentista y en bayesiano)
+-   Double robust estimation
+:::
+:::
+
+-   \[Enlace con webr\]
+-   \[Enlace sin webr\]
+
+## Oye, que yo soy bayesiano {background-color="#23373B"}
+
+-   Se ha incluido en los ejemplos enfoques bayesianos
+
+## Recursos {background-color="#23373B"}
+
+### [Statistical Rethinking](https://github.com/rmcelreath/stat_rethinking_2024): El gran Richard
+
+### [Causal Inference en R](https://www.r-causal.org/)
+
+### [Causal Inference](https://www.hsph.harvard.edu/miguel-hernan/causal-inference-book/): Libro gratuito online
+
+### [Regression and other Stories](https://users.aalto.fi/~ave/ROS.pdf): Gelman, Hill, Vethari. La parte 5
+
+### [The Book of Why](http://bayes.cs.ucla.edu/WHY/): Libro divulgativo de Judea Pearl
+
+### [Mastering 'Metrics](http://www.masteringmetrics.com/): Friendly introduction to IV-based methods
+
+### [Mixtape](https://mixtape.scunning.com/): Bastante didáctivo
