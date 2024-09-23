@@ -16,6 +16,9 @@ resources:
   - data
   - docs/web_user
 engine: knitr
+execute:
+  warning: false
+  message: false
 webr:
   packages:
     - dplyr
@@ -28,6 +31,7 @@ webr:
     - ggokabeito
     - rsample
     - halfmoon
+    - tipr
   repos:
     - https://r-lib.r-universe.dev
 knitr:
@@ -51,6 +55,8 @@ source(here::here("R/setup.R"))
 library(tidyverse)
 library(ggdag)
 library(broom)
+library(rsample)
+
 ```
 
 Pasos en el análisis causal.
@@ -135,6 +141,7 @@ El uso de diagramas causales no es imprescindible, pero ayuda a explicitar las a
 library(tidyverse)
 library(ggdag)
 library(ggokabeito)
+
 net_data <-  read_csv(here::here("data/net_data.csv"))
 mosquito_dag <- dagify(
   malaria_risk ~ net + income + health + temperature + resistance,
@@ -198,6 +205,41 @@ p1
 
 Dado el DAG anterior, vamos a utilizar una técnica conocida como _propensity score weighting_.  El objetivo de esta técnica es crear una pseudopoblación que _imite_ como habrían sido los datos si se hubiera hecho un RCT (Randomized Controlled Trial). 
 
+__¿Hay desequilibrio entre tratamiento y control en las variables de confusión? 
+
+
+:::{.panel-tabset}
+
+#### Solapamiento income
+
+```{r}
+
+net_data |>
+  ggplot(aes(income, fill = net)) +
+  geom_density(color = NA, alpha = .8)
+
+```
+
+#### Solapamiento temperature
+
+```{r}
+net_data |>
+  ggplot(aes(temperature, fill = net)) +
+  geom_density(color = NA, alpha = .8)
+
+```
+
+
+#### Solapamiento health
+
+```{r}
+net_data |>
+  ggplot(aes(health , fill = net)) +
+  geom_density(color = NA, alpha = .8)
+```
+
+
+:::
 
 :::{.panel-tabset}
 
@@ -447,38 +489,7 @@ lm(malaria_risk ~ net + income + temperature + health, data = net_data) |>
   filter(term == "netTRUE")
 ```
 
-:::{.panel-tabset}
 
-#### Solapamiento income
-
-```{r}
-
-net_data |>
-  ggplot(aes(income, fill = net)) +
-  geom_density(color = NA, alpha = .8)
-
-```
-
-#### Solapamiento temperature
-
-```{r}
-net_data |>
-  ggplot(aes(temperature, fill = net)) +
-  geom_density(color = NA, alpha = .8)
-
-```
-
-
-#### Solapamiento health
-
-```{r}
-net_data |>
-  ggplot(aes(health , fill = net)) +
-  geom_density(color = NA, alpha = .8)
-```
-
-
-:::
 
 ### Modelo bayesiano
 
@@ -546,59 +557,11 @@ Con la librería [`tipr`](https://cran.r-project.org/web/packages/tipr/index.htm
 
 
 
-```{r}
-# repito fuera de webr
-
-library(rsample)
-
-# todo el proceso
-fit_ipw <- function(split, ...) {
-  # get bootstrapped data sample with `rsample::analysis()`
-  .df <- analysis(split)
-
-  # fit propensity score model
-  propensity_model <- glm(
-    net ~ income + health + temperature,
-    data = .df,
-    family = binomial()
-  )
-
-  # calculate inverse probability weights
-  .df <-  .df |>
-  mutate(
-    propensity_score = predict(propensity_model, type = "response")
-  ) |>
-  mutate(
-    ipw = ifelse(net_num == 1, 1 / propensity_score, 1 / (1 - propensity_score))
-  )
-
-
-  # fit correctly bootstrapped ipw model
-  lm(malaria_risk ~ net, data = .df, weights = ipw) |>
-    tidy()
-}
-
-bootstrapped_net_data <- bootstraps(
-  net_data,
-  times = 1000,
-  # required to calculate CIs later
-  apparent = TRUE
-)
-
-ipw_results <- bootstrapped_net_data |>
-  mutate(boot_fits = map(splits, fit_ipw))
-
-boot_estimate <- ipw_results |>
-  # intervalo usando percentil
-  int_pctl(boot_fits, alpha = 0.01) |>
-  filter(term == "netTRUE")
-
-```
 
 
 
+```{webr}
 
-```{r}
 library(tipr)
 adjusted_estimates <- boot_estimate |>
   select(.estimate, .lower, .upper) |>
