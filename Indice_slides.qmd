@@ -63,8 +63,7 @@ format: "kakashi-revealjs"
 3.  Cuarteto causal
 4.  Ejemplo buenos y malos controles
 
--   \[Enlace ejemplo\]
--   \[Enlace ejemplo estático\]
+- [Ejemplo dags](ciencia-antes-que-estadistica.html)
 
 ## Técnicas {background-color="#23373B"}
 

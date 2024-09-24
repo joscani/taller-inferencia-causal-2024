@@ -1,0 +1,227 @@
+---
+title: "Ciencia antes que estadística: Dags"
+format: 
+  live-html: 
+    fig-height: 5
+    fig-dpi: 300
+    fig-width: 8
+    fig-align: center
+    code-fold: true
+    code-link: true
+    code-summary: "Show the code"
+    code-tools: true 
+    toc: true 
+    toc-depth: 2 
+resources:
+  - data
+  - docs/web_user
+engine: knitr
+execute:
+  warning: false
+  message: false
+webr:
+  packages:
+    - dplyr
+    - ggplot2
+  repos:
+    - https://r-lib.r-universe.dev
+knitr:
+  opts_chunk:
+    out.width: 80%
+    fig.showtext: TRUE
+    comment: "#>"
+---
+{{< include ./_extensions/r-wasm/live/_knitr.qmd >}}
+
+
+
+```{r}
+#| echo: false
+#| message: false
+#| label: setup
+
+library(tidyverse)
+
+```
+
+## DAGs
+
+Una forma de hacer explícitas las relaciones causales es simplemente dibujándolas
+
+
+
+```{r}
+#| echo: false
+#| message: false
+#| label: fig-dag-basic
+#| fig-width: 3
+#| fig-height: 2
+#| fig-cap: "A causal directed acyclic graph (DAG). DAGs depict causal relationships. In this DAG, the assumption is that `x` causes `y`."
+library(ggdag)
+dagify(y ~ x, coords = time_ordered_coords()) |>
+  ggdag() +
+  theme_dag()
+```
+
+## Estructuras en un dag
+
+
+```{r}
+#| echo: false
+#| label: fig-dag-path-types
+#| fig-cap: "Three types of causal relationships: forks, chains, and colliders. The direction of the arrows and the relationships of interest dictate which type of path a series of variables is. Forks represent a mutual cause, chains represent direct causes, and colliders represent a mutual descendant."
+coords <- list(x = c(x = 0, y = 2, q = 1), y = c(x = 0, y = 0, q = 1))
+
+fork <- dagify(
+  x ~ q,
+  y ~ q,
+  exposure = "x",
+  outcome = "y",
+  coords = coords
+)
+
+chain <- dagify(
+  q ~ x,
+  y ~ q,
+  exposure = "x",
+  outcome = "y",
+  coords = coords
+)
+
+collider <- dagify(
+  q ~ x + y,
+  exposure = "x",
+  outcome = "y",
+  coords = coords
+)
+
+dag_flows <- map(list(fork = fork, chain = chain, collider = collider), tidy_dagitty) |>
+  map("data") |>
+  list_rbind(names_to = "dag") |>
+  mutate(dag = factor(dag, levels = c("fork", "chain", "collider")))
+
+dag_flows |>
+  ggplot(aes(x = x, y = y, xend = xend, yend = yend)) +
+  geom_dag_edges(edge_width = 1) +
+  geom_dag_point() +
+  geom_dag_text() +
+  facet_wrap(~dag) +
+  expand_plot(
+    expand_x = expansion(c(0.2, 0.2)),
+    expand_y = expansion(c(0.2, 0.2))
+  ) +
+  theme_dag()
+```
+
+Los Dags nos ayudan a evitar y entender algunas paradojas como la de Simpson.
+
+1.  En un _fork_ , `x` e `y` están asociados aunque no hay flecha causal entre ellos
+2.  En un _chain_  `x` e `y` están relacionados sólo a través de q
+3.  En un _collider_, `x` e `y` no están relacionados.
+
+
+Los _path_ que transmiten __asociación__ se les llama _open path_
+Los que no transmiten __asociación__ se les llama _closed_path_
+
+Ahora bien, ¿deberiamos ajustar por `q` para estimar el efecto de `x` en `y`?
+
+En el _fork_ dibujado dónde suponemos que no hay asociación entre `x` e `y` pero si entre `x` y `q` y entre `y` y `q`, si se debería _condicionar_ por `q` para obtener el efecto causal. Condicionar por `q` bloquea el camino y así se elimina ese sesgo. 
+
+`q` es una causa común del tratamiento y de la respuesta. Ejemplo, unos datos observacionales dónde se quiere estimar el efecto de un medicamento en la salud de los pacientes, y `q` es la gravedad actual de una enfermedad. Puede suceder que en esos datos sólo se le haya dado el medicamento nuevo a los pacientes graves, mientras a los menos graves se le da tratamiento convencional en teoría menos efectivo. Podríamos obtener que el efecto del medicamento es pernicioso. Para eso lo que se hace es controlar (estratificar o incluir en el modelo) la variable del grado de la enfermedad. En un estudio experimental aleatorizado, nos evitamos en gran parte este problema, puesto que la aleatoriedad nos garantiza que las variables de confusión , incluso las no observadas, se reparten de forma equitativa entre los grupos de tratamiento y control.
+
+En el _chain_ depende de qué efecto se quiera estimar. si se quiere estimar el efecto global de `x` sobre `y` entonces no se debe condicionar, porque parte del efecto es a través de `q`. Si se quiere estimar el efecto _directo_ entonces si se ha de condicionar por `q`, para de esta forma _descontar_ el efecto mediado por `q`
+
+En un _collider_ no se debe condicionar por `q` porque `q` es una consecuencia de `x` e `y` y condicionar por `q` bloquearía el camino de asociación entre `x` e `y`. Buscar ejemplo 
+
+
+
+## Ejemplos. Sacados del libro R-causal
+
+### Forks
+
+```{webr}
+
+library(patchwork)
+n <- 1000
+
+### q
+q <- rbinom(n, size = 1, prob = .7)
+###
+
+# Q es causa común de x e y 
+### x
+
+x <- 2 * q + rnorm(n)
+###
+
+### y
+y <- -3 * q + rnorm(n)
+###
+
+confounder_data <- tibble(x, y, q = as.factor(q))
+
+confounder_data 
+## Correlación x,y 
+cor(x,y)
+
+p1 <- confounder_data |>
+  ggplot(aes(x, y)) +
+  geom_point(alpha = .2) +
+  geom_smooth(method = "lm", se = FALSE, color = "black") +
+  facet_wrap(~"Si no ajustas => sesgo")
+
+p2 <- confounder_data |>
+  ggplot(aes(x, y, color = q)) +
+  geom_point(alpha = .2) +
+  geom_smooth(method = "lm", se = FALSE) +
+  facet_wrap(~"Ajustar por counfounder")
+
+p1 + p2
+
+```
+
+
+
+### Mediator. 
+Copiar código  en la consola de webR
+
+```r
+n = 1000
+x <- rnorm(n)
+###
+
+### q
+linear_pred <- 2 * x + rnorm(n)
+prob <- 1 / (1 + exp(-linear_pred))
+q <- rbinom(n, size = 1, prob = prob)
+###
+
+### y
+y <- -4 * q + rnorm(n)
+###
+
+mediator_data <- tibble(x, y, q = as.factor(q))
+
+p1 <- mediator_data |>
+  ggplot(aes(x, y)) +
+  geom_point(alpha = .2) +
+  geom_smooth(method = "lm", se = FALSE, color = "black") +
+  facet_wrap(~"not adjusting for `q`\n(total effect)")
+
+p2 <- mediator_data |>
+  ggplot(aes(x, y, color = q)) +
+  geom_point(alpha = .2) +
+  geom_smooth(method = "lm", se = FALSE) +
+  facet_wrap(~"adjusting for `q`\n(direct effect)")
+
+p1 + p2
+
+```
+
+```{webr}
+
+
+```
+
+
+Por esto lo de _ciencia_ antes que estadística. 

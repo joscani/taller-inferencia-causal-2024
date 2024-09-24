@@ -1,8 +1,17 @@
 ---
 title: "Taller inferencia causal"
-format: html
+format:
+  html:
+    theme: united
 ---
 
 
 
-[Slides](Indice_slides)
+* [Slides](Indice_slides.html) Tiene enlaces a otros documentos
+* [Datos](https://github.com/joscani/taller-inferencia-causal-2024/tree/main/data)
+
+### Documentos interactivos con webr
+
+- [Juego completo](1-juego-completo.html)
+- [Ciencia antes que estadística](ciencia-antes-que-estadistica.html)
+
