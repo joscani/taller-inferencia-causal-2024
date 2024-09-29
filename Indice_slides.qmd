@@ -1,7 +1,7 @@
 ---
 title: "Taller inferencia causal"
 author: "José Luis Cañadas-Reche"
-date: "2024-09-21 (updated: `r Sys.Date()`)"
+date: "2024-11-07"
 #format:  revealjs
 format: "kakashi-revealjs"
 ---
@@ -29,18 +29,19 @@ format: "kakashi-revealjs"
 
 ## Supuestos y asunciones inferencia causal {background-color="#23373B"}
 
-<ol>
+::: columns
+::: {.column width="50%"}
 
-<li>Consistencia o SUTVA: Qué realmente el análisis conteste a la pregunta causal</li>
+1. Consistencia o SUTVA: Qué realmente el análisis conteste a la pregunta causal
 
-<li>Intercambiabilidad</li>
+2. Intercambiabilidad
+:::
+::: {.column width="50%"}
+3. Positividad
 
-<li>Positividad:</li>
-
-<li>Se podría resumir como "peras con peras" y "manzanas con manzanas".</li>
-
-</ol>
-
+4. Se podría resumir como "peras con peras" y "manzanas con manzanas"
+:::
+:::
 ## RCT's {background-color="#23373B"}
 
 ::: columns
@@ -56,6 +57,11 @@ format: "kakashi-revealjs"
 :::
 :::
 
+##  {background-color="#23373B"}
+
+![Estimand, estimator, estimate](estimand_estimator_estimate.jpg)
+
+
 ## Ciencia antes que estadística {background-color="#23373B"}
 
 1.  El DAG nos ayuda. Hacer explícitas las relaciones
@@ -64,6 +70,11 @@ format: "kakashi-revealjs"
 4.  Ejemplo buenos y malos controles
 
 - [Ejemplo dags](ciencia-antes-que-estadistica.html)
+- [Buenos y malos controles](https://muestrear-no-es-pecado.netlify.app/2024/09/god_and_bad_confounders)
+
+
+
+
 
 ## Técnicas {background-color="#23373B"}
 
