@@ -36,16 +36,80 @@ knitr:
 ```{r setup, include=FALSE}
 library(ggdag)
 library(tidyverse)
+source("./R/setup.R")
+source("./R/ggdag-mask.R")
 
 ```
 
 
+
+
+
+
 El uso de dagitty nos ayuda a identificar por qué variables tenemos que condicionar/estratificar. 
-Pero veamos algunos ejemplos simulados para que nos quede claro 
+Pero veamos algunos ejemplos si wmulados para que nos quede claro 
+
+## Intro
+
+Eliminar los caminos de asociación no causales.
+
+
+
+
+## Counfounder 
+
+DAG
+
+```{r}
+
+dag1 <- dagify(
+  x ~  z, 
+  y ~ z + x
+)
+
+#TODO poner las coordenadas de los nodos
+ggdag(dag1) + theme_dag()
+
+```
+
+```{r}
+
+dagitty:: adjustmentSets(dag1, exposure = "x", outcome = "y")
+
+ggdag_adjustment_set(dag1, exposure = "x", outcome = "y")
+```
+
+
+El modelo correcto dado este dag es ajustar por Z. Veamos si es cierto, simulando la estructura del dag.
+
+```{webr}
+
+z <- rnorm(300)
+
+x <- 2 + 3*z + rnorm(300)
+
+y <- 2 + x + z 
+
+# Modelo incorrecto
+lm(y ~ x)
+
+# Modelo correcto debería dar coeficiente de x = 1
+
+lm(y ~ x + z )
+
+
+```
+
+## Mediator o chain
+
+
 
 
 
 ##  Collider
+
+
+Normalmente "Don't touch the collider !! "
 
 DAG
 
@@ -58,6 +122,13 @@ collider_dag <- dagify(
 #TODO poner las coordenadas de los nodos
 ggdag(collider_dag)
 
+```
+
+```{r}
+
+dagitty:: adjustmentSets(collider_dag, exposure = "x", outcome = "y")
+
+ggdag_adjustment_set(collider_dag, exposure = "x", outcome = "y")
 ```
 
 
@@ -76,7 +147,7 @@ d  |>
   geom_smooth(method = "lm", se = FALSE, color = "black", linewidth= 2) +
   geom_smooth(aes(color= z), method = "lm", se = FALSE)
 
-# Prueba a ajustar
+# Prueba a ajustar lo siguiente, puedes descomentar o escribir tu código
 
 #lm(y ~ x, data = d)
 #lm(y ~ x + z, data = d)
@@ -84,9 +155,179 @@ d  |>
 ```
 
 
-
-
-
 ## Parásito de la precisión
 
+
+Hay veces en que ajustar por pre-treatments es perjudicial. Si no hay variables de confusión "ocultas"
+se produce una parasitación de la precisión
+
+DAG
+
+```{r}
+
+dag2 <- dagify(
+  x ~  z, 
+  y ~  x
+)
+
+#TODO poner las coordenadas de los nodos
+ggdag(dag2) + theme_dag()
+
+```
+
+```{r}
+
+dagitty:: adjustmentSets(dag2, exposure = "x", outcome = "y")
+
+ggdag_adjustment_set(dag2, exposure = "x", outcome = "y")
+```
+
+```{webr}
+
+z <- rnorm(800)
+
+x <-  2 + 2*z + rnorm(800)
+
+y <-  2 * x + rnorm(800)
+
+d <- tibble(x, y, z)
+
+# no hay sesgo
+
+summary(lm(y ~ x, data = d))
+summary(lm(y ~ x + z, data = d))
+
+
+```
+
+Simulemos para ver mejor la diferencia
+
+```{webr}
+
+f <- function(bzx = 2, bxy =2, n = 100){
+  z <- rnorm(n, 4, 2)
+  x <-  2 + bzx*z + rnorm(n)
+  y <-  2 + bxy*x + rnorm(n)
+  d <- tibble(x, y, z)
+  bx_preciso = coef(lm(y ~ x, data = d))[2]
+  bx_parasito = coef(lm(y ~ x + z,  data = d))[2]
+ return(c(
+    unlist(bx_preciso), unlist(bx_parasito)))
+}
+
+
+sim <- replicate(400, f(n = 200))
+
+
+```
+
+```{webr}
+
+d <- data.frame(bx_preciso = sim[1,], bx_parasito = sim[2,])
+
+d <- d  |> 
+  pivot_longer(cols =everything())
+
+d  |> 
+  ggplot(aes(x = value, fill = name)) +
+  geom_density()
+
+
+
+```
+
+
 ## Amplificación del sesgo
+
+
+A veces, si ajustamos por un pretreatment pero hay una variable de confusión
+no observada, podemos incurrir en amplificación del sesgo
+
+
+DAG
+
+```{r}
+
+dag3 <- dagify(
+  x ~  z + u, 
+  y ~  x + u
+)
+
+#TODO poner las coordenadas de los nodos
+ggdag(dag3) + theme_dag()
+
+```
+
+```{r}
+
+dagitty:: adjustmentSets(dag3, exposure = "x", outcome = "y")
+
+ggdag_adjustment_set(dag3, exposure = "x", outcome = "y")
+```
+Tenemos que ajustar por `u`, pero `u `
+
+```{webr}
+
+z <- rnorm(200)
+u <- rnorm(200)
+
+
+x <-  1 + 2*z + u + rnorm(200)
+
+y <- 1 +   x + u + rnorm(200)
+
+d <- tibble(x, y, z)
+
+# amgos modelos son erróneos puesto que no podemos ajustar por el confounder no observado
+# pero ajustar por la variable pre-treatment amplifica el sesgo
+
+summary(lm(y ~ x, data = d))
+summary(lm(y ~ x + z, data = d))
+
+
+```
+
+Simulemos para ver mejor la diferencia
+
+```{webr}
+
+f <- function(bzx = 2, bxy =1, n = 100){
+  z <- rnorm(n)
+  u <- rnorm(n)
+
+  x <-  1 + bzx*z + u + rnorm(n)
+  y <-  1 + bxy*x + u + rnorm(n)
+  d <- tibble(x, y, z)
+  bx_sesgado = coef(lm(y ~ x, data = d))[2]
+  bx_sesgo_ampli = coef(lm(y ~ x + z,  data = d))[2]
+ return(c(
+    unlist(bx_sesgado), unlist(bx_sesgo_ampli)))
+}
+
+
+sim <- replicate(400, f(n = 200))
+
+
+```
+
+
+
+```{webr}
+
+d <- data.frame(bx_sesgado = sim[1,], bx_sesgo_ampli = sim[2,])
+
+d <- d  |> 
+  pivot_longer(cols =everything())
+
+d  |> 
+  ggplot(aes(x = value, fill = name)) +
+  geom_density()
+
+
+
+```
+
+Y vemos que se produce la amplificación del sesgo
+
+
+
