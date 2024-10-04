@@ -67,10 +67,11 @@ format: "kakashi-revealjs"
 1.  El DAG nos ayuda. Hacer explícitas las relaciones
 2.  Estructuras en el DAG. Forks, mediators, colliders
 3.  Cuarteto causal
-4.  Ejemplo buenos y malos controles
+4.  Buenos y malos controles
 
 - [Ejemplo dags](ciencia-antes-que-estadistica.html)
-- [Buenos y malos controles](https://muestrear-no-es-pecado.netlify.app/2024/09/god_and_bad_confounders)
+- [Buenos y malos controles](3-Buenos-malos-controles.html)
+
 
 
 
@@ -78,17 +79,19 @@ format: "kakashi-revealjs"
 
 ## Técnicas {background-color="#23373B"}
 
+No creo que de tiempo. 
+
 Son sólo técnicas, lo importante es lo de antes.Queremos acercarnos a lo que es un RCT, qué se puede hacer desde perspectiva clásica frecuentista.
 
 ::: columns
 ::: {.column width="50%"}
--   Identificar variables con reglas de Pearl, uso de daggitty
+-   Identificar variables con reglas de Pearl, uso de daggitty (Visto anteriormente)
 -   Propensity Score Matching
--   Inverse Probability Weighting
+-   Inverse Probability Weighting (Visto en el juego completo)
 :::
 
 ::: {.column width="50%"}
--   Meta-learners
+-   Meta-learners 
 -   G-estimation ( esto nos sirve en frecuentista y en bayesiano)
 -   Double robust estimation
 :::
@@ -107,7 +110,7 @@ Son sólo técnicas, lo importante es lo de antes.Queremos acercarnos a lo que e
 
 ### [Causal Inference en R](https://www.r-causal.org/)
 
-### [Causal Inference](https://www.hsph.harvard.edu/miguel-hernan/causal-inference-book/): Libro gratuito online
+### [Causal Inference Book](https://www.hsph.harvard.edu/miguel-hernan/causal-inference-book/): Libro gratuito online
 
 ### [Regression and other Stories](https://users.aalto.fi/~ave/ROS.pdf): Gelman, Hill, Vethari. La parte 5
 
