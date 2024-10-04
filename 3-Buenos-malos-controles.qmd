@@ -1,0 +1,92 @@
+---
+title: "Buenos y malos controles"
+format: 
+  live-html: 
+    fig-height: 5
+    fig-dpi: 300
+    fig-width: 8
+    fig-align: center
+    code-fold: true
+    code-link: true
+    code-summary: "Show the code"
+    code-tools: true 
+    toc: true 
+    toc-depth: 2 
+resources:
+  - data
+  - docs/web_user
+engine: knitr
+execute:
+  warning: false
+  message: false
+webr:
+  packages:
+    - tidyverse
+  repos:
+    - https://r-lib.r-universe.dev
+knitr:
+  opts_chunk:
+    out.width: 80%
+    fig.showtext: TRUE
+    comment: "#>"
+---
+{{< include ./_extensions/r-wasm/live/_knitr.qmd >}}
+
+
+```{r setup, include=FALSE}
+library(ggdag)
+library(tidyverse)
+
+```
+
+
+El uso de dagitty nos ayuda a identificar por qué variables tenemos que condicionar/estratificar. 
+Pero veamos algunos ejemplos simulados para que nos quede claro 
+
+
+
+##  Collider
+
+DAG
+
+```{r}
+
+collider_dag <- dagify(
+  z ~ x + y 
+)
+
+#TODO poner las coordenadas de los nodos
+ggdag(collider_dag)
+
+```
+
+
+```{webr, colllider_sim}
+
+x <- rnorm(800)
+y <- rnorm(800)
+
+z <- as.factor(rbinom(800,1, plogis(2*x - 2*y + rnorm(800))))
+
+d <- tibble(x, y, z)
+
+d  |> 
+ ggplot(aes(x = x, y = y)) +
+  geom_point(aes(color = z)) +
+  geom_smooth(method = "lm", se = FALSE, color = "black", linewidth= 2) +
+  geom_smooth(aes(color= z), method = "lm", se = FALSE)
+
+# Prueba a ajustar
+
+#lm(y ~ x, data = d)
+#lm(y ~ x + z, data = d)
+
+```
+
+
+
+
+
+## Parásito de la precisión
+
+## Amplificación del sesgo
