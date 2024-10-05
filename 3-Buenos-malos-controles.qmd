@@ -56,27 +56,47 @@ Eliminar los caminos de asociación no causales.
 
 
 
-## Counfounder 
+## Counfounder  (Fork)
 
-DAG
+__DAG__
 
 ```{r}
 
+#| echo: true
+
 dag1 <- dagify(
   x ~  z, 
-  y ~ z + x
-)
+  y ~ z + x,
+  exposure = "x",
+  outcome = "y",
+  coords = list(
+    x = c(
+      x = 1,
+      z = 2,
+      y = 3
+    ),
+    y = c(
+      x = 1, 
+      z = 2,
+      y = 1
+  )
+))
 
 #TODO poner las coordenadas de los nodos
 ggdag(dag1) + theme_dag()
 
 ```
 
+usamos dagitty o ggdag_adjustment_set. 
+
 ```{r}
+
+#| echo: true
 
 dagitty:: adjustmentSets(dag1, exposure = "x", outcome = "y")
 
 ggdag_adjustment_set(dag1, exposure = "x", outcome = "y")
+
 ```
 
 
@@ -97,13 +117,111 @@ lm(y ~ x)
 
 lm(y ~ x + z )
 
-
 ```
 
 ## Mediator o chain
 
 
+__DAG__
 
+```{r}
+
+#| echo: true
+
+dag_med <- dagify(
+  z ~  x, 
+  y ~ z ,
+  coords = list(
+    x = c(
+      x = 1,
+      z = 2,
+      y = 3
+    ),
+    y = c(
+      x = 1, 
+      z = 1,
+      y = 1
+  )
+))
+
+#TODO poner las coordenadas de los nodos
+ggdag(dag_med) + theme_dag()
+
+```
+
+usamos dagitty o ggdag_adjustment_set. 
+
+Cuando tenemos un "mediator" podemos estar interesado en el efecto total o en el efecto directo.
+
+
+__efecto total__
+
+
+```{r}
+
+#| echo: true
+
+dagitty:: adjustmentSets(dag_med, exposure = "x", outcome = "y", effect = "total")
+
+ggdag_adjustment_set(dag_med, exposure = "x", outcome = "y", effect = "total") +
+  theme_dag()
+
+```
+
+__efecto_directo__
+
+```{r}
+#| echo: true
+
+dagitty:: adjustmentSets(dag_med, exposure = "x", outcome = "y", effect = "direct")
+
+ggdag_adjustment_set(dag_med, exposure = "x", outcome = "y", effect = "direct") +
+  theme_dag()
+
+```
+
+
+Simulemos 
+
+
+Ponemos que el efecto total de `x` sobre `y` es 6, pero que está mediado sólo por `z`, 
+y que el efecto directo de `x` sobre `y` es 0.
+
+```{webr}
+
+x <- rnorm(800)
+
+z <-  3*x + rnorm(800)
+
+y <- 2*z + rnorm(800)
+
+d <- tibble(x, y, z)
+
+# Dentro de valores similares de Z el efecto de X sobre Y es 0, 
+# por eso hacemos varios cortes en z para verlo
+d  |>
+  mutate(z_cut = cut_interval(z, 9)) |>
+ ggplot(aes(x = x, y = y)) +
+  geom_point(aes(color = z_cut)) +
+  geom_smooth(method = "lm", se = FALSE, color = "black", linewidth= 2) +
+  geom_smooth(aes(color= z_cut), method = "lm", se = FALSE)
+
+```
+
+Efecto total es sin ajustar por `z` y el efecto directo es ajustando por `z`
+
+
+
+
+```{webr}
+
+# efecto total
+lm(y ~ x, data = d)
+
+# efecto directo
+lm(y ~ x + z, data = d)
+
+```
 
 
 ##  Collider
@@ -114,23 +232,38 @@ Normalmente "Don't touch the collider !! "
 DAG
 
 ```{r}
+#| echo: true
 
 collider_dag <- dagify(
-  z ~ x + y 
+  z ~ x + y ,
+  coords = list(
+    x = c(
+      x = 1,
+      z = 2,
+      y = 3
+    ),
+    y = c(
+      x = 1, 
+      z = 2,
+      y = 1
+  )
+)
 )
 
 #TODO poner las coordenadas de los nodos
-ggdag(collider_dag)
+ggdag(collider_dag) + theme_dag()
 
 ```
 
 ```{r}
-
+#| echo: true
 dagitty:: adjustmentSets(collider_dag, exposure = "x", outcome = "y")
 
 ggdag_adjustment_set(collider_dag, exposure = "x", outcome = "y")
 ```
 
+En el siguiente ejemplo, donde hay un collider, el verdadero efecto de x sobre y es 0 por construcción, 
+pero si ajustamos por el collider se abre el camino no causal y tenemos sesgo.
 
 ```{webr, colllider_sim}
 
@@ -164,10 +297,23 @@ se produce una parasitación de la precisión
 DAG
 
 ```{r}
+#| echo: true
 
 dag2 <- dagify(
   x ~  z, 
-  y ~  x
+  y ~  x,
+  coords = list(
+    x = c(
+      x = 1,
+      z = 1,
+      y = 3
+    ),
+    y = c(
+      x = 1, 
+      z = 2,
+      y = 1
+  )
+)
 )
 
 #TODO poner las coordenadas de los nodos
@@ -176,6 +322,7 @@ ggdag(dag2) + theme_dag()
 ```
 
 ```{r}
+#| echo: true
 
 dagitty:: adjustmentSets(dag2, exposure = "x", outcome = "y")
 
@@ -239,7 +386,6 @@ d  |>
 
 ## Amplificación del sesgo
 
-
 A veces, si ajustamos por un pretreatment pero hay una variable de confusión
 no observada, podemos incurrir en amplificación del sesgo
 
@@ -247,11 +393,26 @@ no observada, podemos incurrir en amplificación del sesgo
 DAG
 
 ```{r}
-
+#| echo: true
 dag3 <- dagify(
   x ~  z + u, 
-  y ~  x + u
+  y ~  x + u,
+  coords = list(
+    x = c(
+      x = 1,
+      z = 1,
+      u = 2,
+      y = 3
+    ),
+    y = c(
+      x = 1, 
+      z = 2,
+      u = 1.5,
+      y = 1
+  )
 )
+)
+
 
 #TODO poner las coordenadas de los nodos
 ggdag(dag3) + theme_dag()

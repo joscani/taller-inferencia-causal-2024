@@ -73,10 +73,6 @@ format: "kakashi-revealjs"
 - [Buenos y malos controles](3-Buenos-malos-controles.html)
 
 
-
-
-
-
 ## Técnicas {background-color="#23373B"}
 
 No creo que de tiempo. 
