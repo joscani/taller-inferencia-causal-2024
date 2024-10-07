@@ -43,15 +43,8 @@ source("./R/ggdag-mask.R")
 
 
 
-
-
-
-El uso de dagitty nos ayuda a identificar por qué variables tenemos que condicionar/estratificar. 
-Pero veamos algunos ejemplos si wmulados para que nos quede claro 
-
-## Intro
-
-Eliminar los caminos de asociación no causales.
+Aunque hemos visto previamente las diferentes estructuras en un DAG, en este vamos a simular 
+datos para convencernos de que efectivamente hay buenos y malos controles. 
 
 
 
@@ -489,6 +482,17 @@ d  |>
 ```
 
 Y vemos que se produce la amplificación del sesgo
+
+
+En general los DAG's suelen ser más complejos que los ejemplos que se han mostrado, y muchas veces
+una misma variable puede ser a la vez confounder en un "path" y  collider en otro. Y hay veces que 
+no se pueden estimar ciertos efectos. Aunque hay algunas estrategias que pueden ayudarnos, en particular
+la que Richard McElreath llama "Full luxury bayes", y es que en estadística bayesiana se puede "ajustar" 
+el dag completo y que el significado de condicionar es sustancialmente diferente al de la estadística 
+frecuentista. En estadística frecuentista condicionar equivale a "poner en el lado derecho " de una ecuación , 
+o estratificar por los valores de la covariables. En estadística bayesiana condicionar es ajustar la
+distribución de probabilidad conjunta (o la marginal, según el caso) .
+  
 
 
 
