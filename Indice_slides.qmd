@@ -68,15 +68,13 @@ format: "kakashi-revealjs"
 ::: {.column width="50%"}
 1.  El DAG nos ayuda. Hacer explícitas las relaciones
 2.  Estructuras en el DAG. Forks, mediators, colliders
+3. [Ejemplo dags](ciencia-antes-que-estadistica.html)
 :::
 ::: {.column width="50%"}
-3.  Cuarteto causal
-4.  Buenos y malos controles
+4.  Cuarteto causal
+5.  [Buenos y malos controles](3-Buenos-malos-controles.html)
 :::
 :::
-
-- [Ejemplo dags](ciencia-antes-que-estadistica.html)
-- [Buenos y malos controles](3-Buenos-malos-controles.html)
 
 
 ## Técnicas {background-color="#23373B"}
@@ -118,4 +116,4 @@ Son sólo técnicas, lo importante es lo de antes.Queremos acercarnos a lo que e
 
 ### [Mastering 'Metrics](http://www.masteringmetrics.com/): Friendly introduction to IV-based methods
 
-### [Mixtape](https://mixtape.scunning.com/): Bastante didáctivo
+### [Mixtape](https://mixtape.scunning.com/): Bastante didáctico
