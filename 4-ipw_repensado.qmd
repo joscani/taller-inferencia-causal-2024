@@ -1,0 +1,544 @@
+---
+title: "Inverse probability weighting. ESS"
+format: 
+  live-html: 
+    fig-height: 5
+    fig-dpi: 300
+    fig-width: 8
+    fig-align: center
+    code-fold: true
+    code-link: true
+    code-summary: "Show the code"
+    code-tools: true 
+    toc: true 
+    toc-depth: 2 
+resources:
+  - data
+  - docs/web_user
+engine: knitr
+execute:
+  warning: false
+  message: false
+webr:
+  packages:
+    - tidyverse
+    - halfmoon
+    - janitor
+    - survey
+    - skimr
+    - patchwork
+    - effects
+    - sjPlot
+  repos:
+    - https://r-lib.r-universe.dev
+knitr:
+  opts_chunk:
+    out.width: 80%
+    fig.showtext: TRUE
+    comment: "#>"
+editor: 
+  markdown: 
+    wrap: 125
+---
+
+{{< include ./_extensions/r-wasm/live/_knitr.qmd >}}
+
+```{r setup, include=FALSE}
+
+library(ggdag)
+library(tidyverse)
+source("./R/setup.R")
+source("./R/ggdag-mask.R")
+
+```
+
+El objetivo de esta técnica es conseguir unos *pesos* que al aplicarlos los datos se parezcan lo más posible a los que
+hubiéramos tenido si hubiéramos hecho un diseño experimental.
+
+El diseño experimental siempre va a ser mejor, puesto que va a permitirnos equilibrar incluso aunque hubiera variables de
+confusión no medidas.
+
+No obstante, si hay suficientes variables relacionadas con la probabilidad de recibir el tratamiento, el uso de esta técnica
+puede dar buenos resultados, incluso en diseños experimentales.
+
+## Datos
+
+Son dateos de la encuesta de estructura salarial del INE. Existe cierta representatividad, el INE provee
+unos pesos que permiten hacer ciertas inferencias, pero puede que no todas. 
+
+```{r}
+
+library(tidyverse)
+library(skimr)
+library(broom)
+library(halfmoon)
+library(patchwork)
+library(survey)
+library(ggdag)
+library(ggokabeito)
+
+```
+```{webr}
+
+library(tidyverse)
+library(skimr)
+library(broom)
+library(halfmoon)
+library(patchwork)
+library(survey)
+library(janitor)
+library(sjPlot)
+
+```
+
+Leemos y calculamos ciertas cosas como el salario neto. Estas cosas vienen en la 
+documentación y nota metodológica.
+
+
+```{webr}
+
+# poner ruta al fichero en github
+
+ess <- readRDS("./data/ess2022.Rds")
+ess <- janitor::clean_names(ess)
+
+```
+
+
+La variable `control` indca cuando es 1 que es sector público y 2 cuando es privado
+
+```{webr}
+
+ess <- ess |>
+  mutate(
+    diasmes    = drelabm - dsiespm2,
+    diasrelaba = drelabam * 30.42 + drelabad,
+    diasrelaba = ifelse(diasrelaba > 365, 365, diasrelaba),
+    diasano    = diasrelaba - dsiespa2 - dsiespa4,
+    salbase    = ifelse(siespm1 == "6", (31 / diasmes) * salbase, salbase),
+    comsal     = ifelse(siespm1 == "6", (31 / diasmes) * comsal, comsal),
+    comsaltt   = ifelse(siespm1 == "6", (31 / diasmes) * comsaltt, comsaltt),
+    salmes     = salbase + comsal + extraorm + phextra,
+    salmor     = salbase + comsal + phextra,
+    salneto    = salmes - cotiza - irpfmes,
+    salanual   = (365 / diasano) * (retrinoin + retriin + vespnoin + vespin),
+salaor     = (365 / diasano) * ((retrinoin + retriin) - gextra),
+    vespnoin   = (365 / diasano) * vespnoin,
+    jmp1       = (jsp1 + jsp2 / 60) * 4.35 + hextra,
+    salhora    = salmes / jmp1
+  )
+ess |> 
+    group_by(control) |>    
+    count()
+
+
+
+```
+
+¿Se gana más en el sector público o en el privado? 
+Asumiendo que la ponderación del INE nos da representatividad. 
+
+```{webr}
+
+ess$treatment = ess$control
+ess$treatment = as.factor(ifelse(ess$control == "1", 1, 0))
+# también llamo outcome al salario neto
+ess$outcome = ess$salneto
+
+ess |> 
+    group_by(treatment) |>  
+    summarise(
+        mean = mean(outcome),
+        n = n()
+    )   
+
+ess |> 
+    group_by(treatment) |>  
+    summarise(
+        media_ponderada = weighted.mean(outcome, w = factotal)
+    )   
+
+
+```
+
+Si queremos obtener correctamente los errores estándar y los intervalos de confianza, podemos
+usar la librería `survey`.
+
+```{webr}
+
+# Estimador basado en disenno
+disenno <- svydesign(id = ~1, weight = ~factotal, data = ess)
+
+svyby(~outcome, ~treatment, disenno, svymean)
+
+# o usuando un mdelo lineal
+m1_survey <- svyglm(outcome ~ treatment, design = disenno)
+confint(m1_survey)
+
+```
+
+Pues nos sale que en el sector público se gana más. Pero, ¿para un sector en concreto y con nivel de estudios determinado
+podemos decir lo mismo? ¿ y se aplican los mismos pesos?
+
+
+## Pregunta causal
+
+Vamos a plantearnos una pregunta causal más concreta. Para aquellos que están  en el sector
+sanitario CNAE = Q0, y con nivel educativo de diplomados, ¿Estar en el sector público "causa"
+que se gana más salario neto? 
+
+
+Qué asunciones podemos hacer, qué variables pensamos que afectan, de entre las que tenemos observadas
+
+Dado que hemos fijado el sector CNAE y el nivel educativo, podríamos pensar en otras variables como 
+el `sexo`, `edad`, `habitat del municipio`, `tipo de jornada`, `años de antiguedad`, `tipo de contranto`
+
+Podríamos pensar que algunas de estas variables podrían ser variaables de confusión, es decir, afectan a 
+si se está en un determinado sector y también pueden afectar al salario neto. Si tienes más años de antigüedad, pudiera ser
+que sea más probable estar en el sector público y además tener mayor salario.  
+
+
+Si se hubiera podido hacer un diseño experimental habríamos asignado aleatoriamente a los individuos a un sector u otro, 
+y la distribución de estas variables serían similares en ambos grupos. 
+
+
+### Grafo casual
+
+
+```{r}
+
+
+ess_dag <- dagify(
+  salneto ~ treatment + sexo + edad + habitat + jornada + antiguedad + tipo_contrato,
+  treatment ~ edad +  sexo + habitat + jornada + antiguedad,
+  exposure = "treatment",
+  outcome = "salneto",
+  coords = list(
+    x = c(
+      salneto = 7,
+      treatment = 3,
+      sexo = 4,
+      edad = 4,
+      habitat = 5,
+      jornada = 5,
+      antiguedad = 6,
+      tipo_contrato = 6
+    ),
+    y = c(
+      salneto = 0,
+      treatment = 0,
+      sexo = 1,
+      edad = -1,
+      habitat = 1,
+      jornada = -1,
+      antiguedad = 1,
+      tipo_contrato = -1
+    )
+  ),
+  labels = c(
+    salneto = "Salario neto",
+    treatment = "Sector (público/privado)",
+    sexo = "sexo",
+    edad = "edad",
+    habitat = "Tamaño municipio",
+    jornada = "Jornada completa o parcial",
+    antiguedad = "Años de experiencia",
+    tipo_contrato = "tipo de contrato (indefinido, temporal)"
+  )
+)
+
+p1 <- ess_dag |>
+  tidy_dagitty() |>
+  node_status() |>
+  ggplot(
+    aes(x, y, xend = xend, yend = yend, color = status)
+  ) +
+  geom_dag_edges() +
+  geom_dag_point() +
+  geom_dag_label(color = "black") +
+  # geom_dag_label_repel() +
+  scale_color_okabe_ito(na.value = "grey90") +
+  theme_dag() +
+  theme(legend.position = "none") +
+  coord_cartesian(clip = "off")
+p1
+
+```
+
+
+
+## Solapamiento
+
+En primer lugar seleccionamos el subgrupo que vamos a estudiar. 
+
+```{webr}
+
+ess_filtro   <-  ess  |> 
+  filter(cnace == "Q0", estu == "6")
+
+```
+
+Veamos si hay solapamiento. 
+
+
+
+`edad` es variable categórica. Viendo la proporción de gente en cada grupo de edad y sector, 
+se ve que hay solapamiento, pero la distribución es bastente diferente. 
+
+
+```{webr}
+
+(dist_edad <- ess_filtro |>
+  group_by(treatment, anos2) |>
+  summarise(
+            n = n()
+  ) |>
+  ungroup() |>
+  pivot_wider(names_from = treatment, values_from = n, names_prefix = "treatment_") |>
+  mutate(
+    pct0 = 100 * treatment_0 / sum(treatment_0, na.rm = TRUE),
+    pct1 = 100 * treatment_1 / sum(treatment_1, na.rm = TRUE)
+  ))
+
+
+dist_edad  |> 
+  select(-starts_with("treatment")) |>
+  pivot_longer(cols = starts_with("pct"), names_to = "Sector", values_to = "prop")  |> 
+  ggplot(aes(anos2, prop, fill = Sector)) +
+  geom_col(position = "dodge") +
+  scale_fill_manual(values = c("#F8766D", "#00BFC4")) +
+  labs(
+    x = "Edad",
+    y = "Porcentaje",
+    fill = "Sector"
+  ) +
+  theme_light() +
+  theme(legend.position = "top")
+
+```
+
+Años de antigüedad.
+
+
+```{webr}
+
+ess_filtro |> 
+  ggplot(aes(anoanti, fill = treatment)) +
+  geom_density(alpha = 0.5) +
+  scale_fill_manual(values = c("#F8766D", "#00BFC4")) +
+  labs(
+    x = "Años de antigüedad",
+    y = "Densidad",
+    fill = "Sector"
+  ) +
+  theme_light()
+
+
+```
+
+Probad a ver la distribución de habitat (`estrato2`) o tipo de contrato (`tipo_con`)
+
+
+Una forma de ver si el "peso" que da la encuesta del INE es adecuado para ver si corrige el desbalanceo
+es calcular las diferencias estandarizadas aplicando ese peso y compararlas con las de sin aplicar
+
+
+### SMDs
+
+
+```{webr}
+
+plot_df <- tidy_smd(
+  ess_filtro,
+  c(sexo, anos2, ,estrato2, tipojor, anoanti, tipocon),
+  .group = treatment,
+  .wts = factotal
+)
+
+plot_df
+
+
+```
+
+Lo podemos ver un "love plot"
+
+```{webr}
+
+ggplot(
+  plot_df,
+  aes(
+    x = abs(smd),
+    y = variable,
+    group = method,
+    color = method
+  )
+) +
+  geom_love()
+
+```
+
+En este caso, como el peso de la encuesta está pensado para dar representatividad de la población española,
+no nos vale para contestar a la pregunta causal planteada. 
+
+## Inverse probability weighting
+
+
+Modelamos el tratamiento en función de las covariables que pensamos que pueden ser de confusión
+
+Usamos una regresión logística, pero como se ha comentado antes, podría ser otro modelo
+
+```{webr}
+
+treatment_model  <- glm(treatment ~ anos2 + sexo + estrato2 + tipojor + anoanti ,
+        data = ess_filtro, family = "binomial")
+
+
+summary(treatment_model)
+```
+
+Aplicamos los pesos
+
+
+```{webr}
+
+ess_filtro_with_ipw <- ess_filtro |>
+  mutate(
+    propensity_score = predict(treatment_model, type = "response")
+  ) |>
+  mutate(
+    ipw = ifelse(treatment == 1, 1 / propensity_score, 1 / (1 - propensity_score))
+  )
+
+
+```
+
+¿Este peso ha conseguido balancear las covariables ?
+
+```{webr}
+
+plot_df <- tidy_smd(
+  ess_filtro_with_ipw,
+  c(sexo, anos2, ,estrato2, tipojor, anoanti, tipocon),
+  .group = treatment,
+  .wts = ipw
+)
+
+plot_df
+
+ggplot(
+  plot_df,
+  aes(
+    x = abs(smd),
+    y = variable,
+    group = method,
+    color = method
+  )
+) +
+  geom_love()
+
+```
+
+Algunas preguntas. ¿Qué pasa si añadimos el tipo de contrato al modelo del tratamiento? 
+¿El tipo de contrato es una variable de confusión, habría que estratificar? 
+
+
+### Estimación del efecto
+
+Para estimar el efecto usando ipw, podemos hacer simplemnente la media ponderada. 
+
+
+```{webr}
+
+disenno <- svydesign(id = ~1, weight = ~ipw, data = ess_filtro_with_ipw)
+
+svyby(~outcome, ~treatment, disenno, svymean)
+
+```
+
+También podemos usar un modelo lineal, y nos evitamos hacer bootstrap usando la librería `survey`
+
+```{webr}
+
+mod_svyglm <- svyglm(outcome ~ treatment , design = disenno)
+
+summary(mod_svyglm)
+confint(mod_svyglm)
+
+sjPlot::plot_model(mod_svyglm, type = "eff", terms = c(  "treatment"))
+```
+
+Que comparado con no usar ipw, vemos que da un efecto más pequeño, pero en elmismo sentido
+
+
+```{webr}
+summary(lm(outcome ~ treatment, data = ess_filtro_with_ipw))
+
+```
+
+Y si usamos los pesos de la encuesta, el efecto es mayor aún. 
+
+```{webr}
+disenno_ine <- svydesign(id = ~1, weight = ~factotal, data = ess_filtro)
+
+svyglm(outcome ~ treatment , design = disenno_ine) |> summary()
+
+
+```
+
+
+¿Y si ajustamos además por tipo de contrato?
+
+
+
+```{webr}
+
+mod_svyglm_2 <- svyglm(outcome ~ treatment + tipocon , design = disenno)
+
+summary(mod_svyglm_2)
+confint(mod_svyglm_2)
+
+```
+
+Podemos ver el efecto dentro de cada nivel de `tipocon` 
+
+```{webr}
+
+sjPlot::plot_model(mod_svyglm_2, type = "eff", terms = c(  "treatment"))
+sjPlot::plot_model(mod_svyglm_2, type = "eff", terms = c( "tipocon", "treatment" ))
+
+```
+
+### Y sin ipw
+
+
+```{webr}
+
+mod_simple_2 <- glm(outcome ~ treatment + sexo + anos2 +  estrato2  + tipojor  + anoanti ,
+                    data = ess_filtro_with_ipw)
+
+confint(mod_simple_2)
+
+sjPlot::plot_model(mod_simple_2, type = "eff", terms = c(  "treatment"))
+sjPlot::plot_model(mod_simple_2, type = "eff", terms = c("anoanti",  "treatment"))
+
+```
+
+Por eso es importante definir bien la pregunta causal y dónde se aplica, además de tener en cuenta que con la 
+inferencia causal queremos responder a "¿qué habría pasado si..?". Una de las mejores
+formas es hacer un RCT, pero no siempre es posible, técnicas como el ipw intentan crear una
+pseudo población que se parezca a lo que se obtendría haciendo un RCT
+
+
+## Resumen
+
+Efecto sobre el salario en sector sanitario y máximo estudios diplomados. ¿cuánto más se gana en sector público vs privado? 
+
+- Modelo sin peso,  sin condicionar por variables: 727
+- Modelo sin peso,  condicionando por variables: 388
+- Modelo con pesos ine, sin condicionar por variables: 787
+- Modelo con pesos ine, condicionando por variables: 323
+- Modelo con ipw, sin condicionar por variables: 343 ( 284, 402)
+- Modelo con ipw, condicionando además por `tipocon`:  515 ( 445, 585)
+
+¿Cuál es el verdadero efecto?  Yo no lo sé, pero en las técnicas de inferencia causal al menos se explicitan las asunciones  ( grafo), se 
+analiza solapamiento, positividad, etc. En ausencia o imposibilidad de realizar un RCT es lo mejor que tenemos. 

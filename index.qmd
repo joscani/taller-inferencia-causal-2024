@@ -15,4 +15,6 @@ format:
 - [Juego completo](1-juego-completo.html)
 - [Ciencia antes que estadística](ciencia-antes-que-estadistica.html)
 - [Buenos  y malos controles](3-Buenos-malos-controles.html)
+- [Inverse Probability Weighting_1](4-ipw.html)
+- [Inverse Probability Weighting_con_datos_ine](4-ipw_repensado.html)
 

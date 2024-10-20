@@ -1,0 +1,412 @@
+---
+title: "Inverse probability weighting"
+format: 
+  live-html: 
+    fig-height: 5
+    fig-dpi: 300
+    fig-width: 8
+    fig-align: center
+    code-fold: true
+    code-link: true
+    code-summary: "Show the code"
+    code-tools: true 
+    toc: true 
+    toc-depth: 2 
+resources:
+  - data
+  - docs/web_user
+engine: knitr
+execute:
+  warning: false
+  message: false
+webr:
+  packages:
+    - tidyverse
+    - MatchIt
+    - halfmoon
+  repos:
+    - https://r-lib.r-universe.dev
+knitr:
+  opts_chunk:
+    out.width: 80%
+    fig.showtext: TRUE
+    comment: "#>"
+editor: 
+  markdown: 
+    wrap: 125
+---
+
+{{< include ./_extensions/r-wasm/live/_knitr.qmd >}}
+
+```{r setup, include=FALSE}
+library(ggdag)
+library(tidyverse)
+source("./R/setup.R")
+source("./R/ggdag-mask.R")
+```
+
+El objetivo de esta técnica es conseguir unos *pesos* que al aplicarlos los datos se parezcan lo más posible a los que
+hubiéramos tenido si hubiéramos hecho un diseño experimental.
+
+El diseño experimental siempre va a ser mejor, puesto que va a permitirnos equilibrar incluso aunque hubiera variables de
+confusión no medidas.
+
+No obstante, si hay suficientes variables relacionadas con la probabilidad de recibir el tratamiento, el uso de esta técnica
+puede dar buenos resultados, incluso en diseños experimentales.kllk
+
+## Datos
+
+TODO: Cambiar a webr cuando funcione
+
+```{webr}
+library(purrr)
+library(dplyr)
+library(ggplot2)
+library(skimr)
+library(broom)
+library(halfmoon)
+library(patchwork)
+
+library(MatchIt)
+
+```
+
+## Solapamiento
+
+Una de las asunciones de la inferencia causal tiene que ver con la positividad y con el solapamiento.
+
+Es decir, que si hay una variable como la edad, no es bueno que el tratamiento lo hayan recibido solo los mayores de 50, y
+que nadie de esa edad estuviera en el grupo de control. Sin un mínimo de solapamiento no hay estudio ni inferencia causal que
+valga.
+
+Ahora bien, cuando existe cierto solapamiento, podemos usar técnicas como `ipw` para dar más importancia a casos que están en
+tratamiento pero cuyas covariables indican que era más probable haber estado en el grupo de control y al revés.
+
+#### Solapamiento income
+
+```{webr}
+library("MatchIt")
+data("lalonde")
+```
+
+::: {.callout-tip appearance="simple"}
+## help lalonde
+
+### Description
+
+This is a subsample of the data from the treated group in the National Supported Work Demonstration (NSW) and the comparison
+sample from the Population Survey of Income Dynamics (PSID). This data was previously analyzed extensively by Lalonde (1986)
+and Dehejia and Wahba (1999).
+
+### Format
+
+A data frame with 614 observations (185 treated, 429 control). There are 9 variables measured for each individual.
+
+-   "treat" is the treatment assignment (1=treated, 0=control).
+
+-   "age" is age in years.
+
+-   "educ" is education in number of years of schooling.
+
+-   "race" is the individual's race/ethnicity, (Black, Hispanic, or White). Note previous versions of this dataset used
+    indicator variables `black` and `hispan` instead of a single race variable.
+
+-   "married" is an indicator for married (1=married, 0=not married).
+
+-   "nodegree" is an indicator for whether the individual has a high school degree (1=no degree, 0=degree).
+
+-   "re74" is income in 1974, in U.S. dollars.
+
+-   "re75" is income in 1975, in U.S. dollars.
+
+-   "re78" is income in 1978, in U.S. dollars.
+
+"treat" is the treatment variable, "re78" is the outcome, and the others are pre-treatment covariates.
+
+### References
+
+Lalonde, R. (1986). Evaluating the econometric evaluations of training programs with experimental data. *American Economic
+Review* 76: 604-620.
+
+Dehejia, R.H. and Wahba, S. (1999). Causal Effects in Nonexperimental Studies: Re-Evaluating the Evaluation of Training
+Programs. *Journal of the American Statistical Association* 94: 1053-1062.
+:::
+
+
+
+```{webr}
+df <- lalonde
+df |> mutate(treat = as.factor(treat), 
+             re78_log = log1p(re78)) |>
+ ggplot( aes(re78_log)) +
+  geom_mirror_histogram(
+    aes(fill = treat),
+    bins = 50
+  ) +
+  scale_y_continuous()
+  labs(x = "log(re78+1)")
+```
+
+
+
+
+En este caso hay mucho solapamiento, por lo que el impacto de usar o no `ipw` no sería tan grande.
+
+## Inverse probability weighting
+
+### Modelar el tratamiento
+
+Se trata de hacer un modelo para ver como se relacionan las covareiables con el tratamiento. Vamos a hacer una regresión
+logística pero podría ser un random forest o similar.
+
+Fijaros que en este modelo se está utilizando los ingresos del 74 al cuadrado y también interacción entre ingresos y raza
+
+```{webr}
+
+propensity_model <- glm(
+  treat ~ re74 + race + married + I(re74^2) + re74:race,
+  data = lalonde, family = "binomial")
+  
+```
+
+Ahora es calcular los peso usando la probabilidad estimada por el modelo
+
+Para los que han caído en tratamiento , el peso se estima como 1 / prob_modelo, y si ha caído en control, el peso es 1 / (1 -
+prob_modelo).
+
+Así, si un caso que está en control tiene una probabilidad de 0.8 de haber caído en tratamiento, está claro que puede ser un
+buen contrafactual. y se le da un peso de 1 / (1-0.8) = 5
+
+```{webr}
+
+df_with_ipw  <- df |>
+  mutate(
+    propensity_score = predict(propensity_model, type = "response")
+  ) |>
+  mutate(
+    ipw = ifelse(treat == 1, 1 / propensity_score, 1 / (1 - propensity_score))
+  )
+
+df_with_ipw |>
+  sample_n(10) |> 
+  select(treat, propensity_score, ipw)
+
+```
+
+¿como ha cambiado la distribución de las variables al usar estos pesos?
+
+```{webr}
+
+p1 <- df_with_ipw |>
+  filter(re74 > 0) |>
+  mutate(treat = as.factor(treat)) |> 
+  ggplot(aes(re74)) +
+  geom_mirror_histogram(aes(fill = as_factor(treat)), bins = 50) +
+  scale_y_continuous(labels = abs) +
+  labs(x = "Income sin pesos")
+
+p2 <- df_with_ipw |>
+  filter(re74 > 0) |>
+  mutate(treat = as.factor(treat)) |> 
+  ggplot(aes(re74, weight = ipw)) +
+  geom_mirror_histogram(
+    aes(fill = as_factor(treat)),
+    bins = 50
+  ) +
+  scale_y_continuous(labels = abs) +
+  labs(x = "Income con pesos")
+
+p1 / p2
+
+```
+
+Resulta que hay pesos muy altos
+
+```{webr}
+df_with_ipw |> skim(ipw)
+```
+
+
+```{webr}
+table(cut(df_with_ipw$ipw, 8))
+```
+```{webr}
+df_with_ipw <- df_with_ipw |> 
+ mutate(ipw = ifelse(ipw > 20, 20, ipw))
+```
+
+
+```{webr}
+
+p1 <- df_with_ipw |>
+  filter(re74 > 0) |>
+  mutate(treat = as.factor(treat)) |> 
+  ggplot(aes(re74)) +
+  geom_mirror_histogram(aes(fill = as_factor(treat)), bins = 50) +
+  scale_y_continuous(labels = abs) +
+  labs(x = "Income sin pesos")
+
+p2 <- df_with_ipw |>
+  filter(re74 > 0) |>
+  mutate(treat = as.factor(treat)) |> 
+  ggplot(aes(re74, weight = ipw)) +
+  geom_mirror_histogram(
+    aes(fill = as_factor(treat)),
+    bins = 50
+  ) +
+  scale_y_continuous(labels = abs) +
+  labs(x = "Income con pesos")
+
+p1 / p2
+
+```
+
+
+```{webr}
+
+plot_df <- tidy_smd(
+  df_with_ipw,
+  c(re74, re75, age, race, married, educ),
+  .group = treat,
+  .wts = ipw
+)
+
+plot_df
+
+ggplot(
+  plot_df,
+  aes(
+    x = abs(smd),
+    y = variable,
+    group = method,
+    color = method
+  )
+) +
+  geom_love()
+```
+
+## Estimación del efecto
+
+```{webr}
+# modelo sesgado
+df_with_ipw |>
+  lm(re78 ~  as_factor(treat), data = _) |>
+  tidy(conf.int = TRUE)
+
+
+# modelo con ipw
+
+df_with_ipw |>
+  lm(re78 ~  treat, data = _, weights = ipw) |>
+  tidy(conf.int = TRUE) |> 
+  filter(term == "treat")
+```
+
+
+
+```{webr}
+library(rsample)
+
+# todo el proceso
+fit_ipw <- function(split, ...) {
+  # get bootstrapped data sample with `rsample::analysis()`
+  .df <- analysis(split)
+
+  # fit propensity score model
+  propensity_model <- glm(
+      treat ~ re74 + race + married + I(re74^2) + re74:race,
+      data = .df, family = "binomial")
+  
+  
+  # calculate inverse probability weights
+  .df <-  .df |>
+  mutate(
+    propensity_score = predict(propensity_model, type = "response")
+  ) |>
+  mutate(
+    ipw = ifelse(treat == 1, 1 / propensity_score, 1 / (1 - propensity_score))
+  )
+  # recortar algunos pesos grandes
+  .df <- .df |> mutate(ipw = ifelse(ipw > 20, 20, ipw))
+
+  # fit correctly bootstrapped ipw model
+  
+  lm(re78 ~  treat, data = .df, weights = ipw) |> tidy() 
+}
+```
+
+
+```{webr}
+bootstrapped_lalonde_data <- bootstraps(
+  df,
+  times = 1000,
+  # required to calculate CIs later
+  apparent = TRUE
+)
+
+analysis(bootstrapped_lalonde_data$splits[[1]])
+```
+
+
+```{webr}
+# En cada muestra ejecutamos el proceso completo
+
+ipw_results <- bootstrapped_lalonde_data |>
+  mutate(boot_fits = map(splits, fit_ipw))
+
+ipw_results
+
+ipw_results$boot_fits[[1]]
+
+
+```
+
+
+```{webr}
+
+ipw_results |>
+  mutate(
+    estimate = map_dbl(
+      boot_fits,
+      # pull the `estimate` for `netTRUE` for each fit
+      # \(.fit) .fit |>
+        function(x) {
+          x |>
+        filter(term == "treat") |>
+        pull(estimate)
+          }
+    )
+  ) |>
+  ggplot(aes(estimate)) +
+  geom_histogram(fill = "#D55E00FF", color = "white", alpha = 0.8)
+```
+
+
+```{webr}
+boot_estimate <- ipw_results |>
+  # intervalo usando percentil
+  int_pctl(boot_fits, alpha = 0.05) |>
+  filter(term == "treat")
+
+boot_estimate
+
+```
+
+En vez de usar boostrap podemos usar la librería `survey` que tiene funciones para hacer estimaciones con pesos
+
+```{webr}
+library(survey)
+## Another simplier way to check balance (no love plot)
+weighteddata <- svydesign(ids = ~ 1, data = df_with_ipw, weights = ~ipw)
+
+mod_survey <- svyglm(re78 ~ treat, design = weighteddata) 
+
+summary(mod_survey)
+```
+
+
+```{webr}
+ confint(mod_survey, level = 0.95)
+```
+
+

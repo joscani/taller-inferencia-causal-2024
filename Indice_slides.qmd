@@ -64,10 +64,16 @@ format: "kakashi-revealjs"
 
 ## Ciencia antes que estadística {background-color="#23373B"}
 
+::: columns
+::: {.column width="50%"}
 1.  El DAG nos ayuda. Hacer explícitas las relaciones
 2.  Estructuras en el DAG. Forks, mediators, colliders
+:::
+::: {.column width="50%"}
 3.  Cuarteto causal
 4.  Buenos y malos controles
+:::
+:::
 
 - [Ejemplo dags](ciencia-antes-que-estadistica.html)
 - [Buenos y malos controles](3-Buenos-malos-controles.html)
@@ -82,8 +88,8 @@ Son sólo técnicas, lo importante es lo de antes.Queremos acercarnos a lo que e
 ::: columns
 ::: {.column width="50%"}
 -   Identificar variables con reglas de Pearl, uso de daggitty (Visto anteriormente)
--   Propensity Score Matching
--   Inverse Probability Weighting (Visto en el juego completo)
+-   Propensity Score Matching [MatchIt](https://cran.r-project.org/web/packages/MatchIt/vignettes/MatchIt.html) 
+-   [Inverse Probability Weighting](4-ipw_repensado.html)
 :::
 
 ::: {.column width="50%"}
@@ -93,12 +99,10 @@ Son sólo técnicas, lo importante es lo de antes.Queremos acercarnos a lo que e
 :::
 :::
 
--   \[Enlace con webr\]
--   \[Enlace sin webr\]
 
 ## Oye, que yo soy bayesiano {background-color="#23373B"}
 
--   Se ha incluido en los ejemplos enfoques bayesianos
+- Esto os lo cuento en el bar, o taller del año que viene  
 
 ## Recursos {background-color="#23373B"}
 
