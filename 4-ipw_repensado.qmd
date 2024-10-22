@@ -13,6 +13,7 @@ format:
     toc: true 
     toc-depth: 2 
 resources:
+  - data
   - docs/web_user
 engine: knitr
 execute:
@@ -98,7 +99,7 @@ documentación y nota metodológica.
 
 # poner ruta al fichero en github
 
-ess <- readRDS("https://github.com/joscani/taller-inferencia-causal-2024/blob/main/data/ess2022.Rds")
+ess <- readRDS("./data/ess2022.Rds")
 ess <- janitor::clean_names(ess)
 
 ```
