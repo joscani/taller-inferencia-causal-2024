@@ -13,7 +13,6 @@ format:
     toc: true 
     toc-depth: 2 
 resources:
-  - data
   - docs/web_user
 engine: knitr
 execute:
