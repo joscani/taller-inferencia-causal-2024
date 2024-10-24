@@ -6,7 +6,7 @@ Gran  parte del material viene del estupendo libro online [Causal inference in R
 
 Yo comentaré a mi manera las cosas que allí se cuenta y aportaré en la medida de lo posible cómo sería de forma bayesiana
 
-
+# TODO añadir QR
 # Índice 
 
 ## 0. Qué es esto de la inferencia causal
