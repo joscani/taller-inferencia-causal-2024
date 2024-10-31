@@ -68,9 +68,9 @@ format: "kakashi-revealjs"
 ::: {.column width="50%"}
 1.  El DAG nos ayuda. Hacer explícitas las relaciones
 2.  Estructuras en el DAG. Forks, mediators, colliders
-3. [Ejemplo dags](ciencia-antes-que-estadistica.html)
 :::
 ::: {.column width="50%"}
+3. [Ejemplo dags](ciencia-antes-que-estadistica.html)
 4.  Cuarteto causal
 5.  [Buenos y malos controles](3-Buenos-malos-controles.html)
 :::
@@ -79,9 +79,6 @@ format: "kakashi-revealjs"
 
 ## Técnicas {background-color="#23373B"}
 
-No creo que de tiempo. 
-
-Son sólo técnicas, lo importante es lo de antes.Queremos acercarnos a lo que es un RCT, qué se puede hacer desde perspectiva clásica frecuentista.
 
 ::: columns
 ::: {.column width="50%"}
