@@ -63,7 +63,7 @@ puede dar buenos resultados, incluso en diseños experimentales.
 
 ## Datos
 
-Son dateos de la encuesta de estructura salarial del INE. Existe cierta representatividad, el INE provee
+Son datos de la encuesta de estructura salarial del INE. Existe cierta representatividad, el INE provee
 unos pesos que permiten hacer ciertas inferencias, pero puede que no todas. 
 
 ```{r}
@@ -96,8 +96,6 @@ documentación y nota metodológica.
 
 
 ```{webr}
-
-# poner ruta al fichero en github
 
 ess <- readRDS("./data/ess2022.Rds")
 ess <- janitor::clean_names(ess)
@@ -135,7 +133,8 @@ ess |>
 
 ```
 
-¿Se gana más en el sector público o en el privado? 
+__¿Se gana más en el sector público o en el privado?__
+
 Asumiendo que la ponderación del INE nos da representatividad. 
 
 ```{webr}
@@ -283,7 +282,7 @@ Veamos si hay solapamiento.
 
 
 `edad` es variable categórica. Viendo la proporción de gente en cada grupo de edad y sector, 
-se ve que hay solapamiento, pero la distribución es bastente diferente. 
+se ve que hay solapamiento, pero la distribución es bastante diferente. 
 
 
 ```{webr}
@@ -462,12 +461,13 @@ También podemos usar un modelo lineal, y nos evitamos hacer bootstrap usando la
 mod_svyglm <- svyglm(outcome ~ treatment , design = disenno)
 
 summary(mod_svyglm)
+
 confint(mod_svyglm)
 
 sjPlot::plot_model(mod_svyglm, type = "eff", terms = c(  "treatment"))
 ```
 
-Que comparado con no usar ipw, vemos que da un efecto más pequeño, pero en elmismo sentido
+Que comparado con no usar ipw, vemos que da un efecto más pequeño, pero en el mismo sentido
 
 
 ```{webr}
@@ -487,8 +487,6 @@ svyglm(outcome ~ treatment , design = disenno_ine) |> summary()
 
 
 ¿Y si ajustamos además por tipo de contrato?
-
-
 
 ```{webr}
 
@@ -525,7 +523,7 @@ sjPlot::plot_model(mod_simple_2, type = "eff", terms = c("anoanti",  "treatment"
 
 Por eso es importante definir bien la pregunta causal y dónde se aplica, además de tener en cuenta que con la 
 inferencia causal queremos responder a "¿qué habría pasado si..?". Una de las mejores
-formas es hacer un RCT, pero no siempre es posible, técnicas como el ipw intentan crear una
+formas es hacer un RCT, pero no siempre es posible, técnicas como el __ipw__ intentan crear una
 pseudo población que se parezca a lo que se obtendría haciendo un RCT
 
 
