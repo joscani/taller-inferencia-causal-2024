@@ -32,8 +32,7 @@ format: "kakashi-revealjs"
 ::: columns
 ::: {.column width="50%"}
 
-1. Consistencia o SUTVA: Qué realmente el análisis conteste a la pregunta causal, y que
-   haya independencia a nivel de unidad de análisis.
+1. Consistencia o SUTVA 
 
 2. Intercambiabilidad
 :::
