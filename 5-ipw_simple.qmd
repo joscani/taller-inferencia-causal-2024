@@ -100,7 +100,7 @@ También vamos a centrar el tiro en cierta subpoblación
 
 Vamos a plantearnos una pregunta causal más concreta. Para aquellos que están  en el sector
 sanitario CNAE = Q0, y con nivel educativo de diplomados, ¿Estar en el sector público "causa"
-que se gana más salario neto? 
+que se gane más salario neto? 
 
 Si pudiéramos hacer un "experimento" habríamos dicho que la mitad de la gente con estudios de 
 diplomatura de Enfermería estuvieran en el sector privado y la otra mitad en el público. 
@@ -110,7 +110,7 @@ Pero no podemos.
 Qué asunciones podemos hacer, qué variables pensamos que afectan, de entre las que tenemos observadas
 
 Dado que hemos fijado el sector CNAE y el nivel educativo, podríamos pensar en otras variables como 
-el `sexo`, `edad`, `habitat del municipio`, `tipo de jornada`, `años de antiguedad`, `tipo de contranto`
+el `sexo`, `edad`, `habitat del municipio`, `tipo de jornada`, `años de antiguedad`, `tipo de contrato`
 
 Podríamos pensar que algunas de estas variables podrían ser variaables de confusión, es decir, afectan a 
 si se está en un determinado sector y también pueden afectar al salario neto. Si tienes más años de antigüedad, pudiera ser
@@ -330,7 +330,7 @@ no nos vale para contestar a la pregunta causal planteada.
 
 ## Inverse probability weighting
 
-TODO: Insertar fórmula
+
 
 
 Modelamos el tratamiento en función de las covariables que pensamos que pueden ser de confusión
@@ -362,6 +362,22 @@ ess_filtro_with_ipw <- ess_filtro |>
 
 ```
 
+
+Con estos pesos se consigue que si una observación ha caído en control pero tiene una probabilidad en el modelo de propensity score de 0.9, su peso es de 1 /(1-0.9) = 10 . Es decir, este individuo se considera un muy buen contrafactual para un individuo de iguales características que hubiera caido en tratamiento.
+
+
+Por ejemplo, vemos que si estás en tratamiento (sector público), pero tienes pocos años de antigüedad, se le da un peso `ipw` alto. 
+
+```{webr}
+
+ess_filtro_with_ipw |> 
+  filter(treatment == 1) |> 
+  select(treatment, anoanti, ipw, everything())
+
+```
+
+
+
 ¿Este peso ha conseguido balancear las covariables ?
 
 ```{webr}
@@ -389,9 +405,62 @@ ggplot(
 ```
 
 
+Veamos como es el solapamiento ahora en años de antiguedad
+
+
+```{webr}
+
+p_prev_ipw <- ess_filtro_with_ipw |> 
+  ggplot(aes(anoanti, fill = treatment)) +
+  geom_density(alpha = 0.5) +
+  scale_fill_manual(values = c("#F8766D", "#00BFC4")) +
+  labs(
+    x = "Años de antigüedad",
+    y = "Densidad",
+    fill = "Sector"
+  ) +
+  theme_light() +
+  labs(title = "Solapamiento inicial" )
+
+
+p_post_ipw <- ess_filtro_with_ipw |> 
+  ggplot(aes(anoanti, fill = treatment, weight = ipw)) +
+  geom_density(alpha = 0.3) +
+  scale_fill_manual(values = c("#F8766D", "#00BFC4")) +
+  labs(
+    x = "Años de antigüedad", 
+    y = "Densidad",
+    fill = "Sector"
+  ) +
+  theme_light() +
+  labs(title = "Solapamiento tras ipw" )
+
+p_prev_ipw / p_post_ipw
+
+```
+
+
+
+
+
+
+
 ### Estimación del efecto
 
 Para estimar el efecto usando ipw, podemos hacer simplemnente la media ponderada. 
+
+
+
+```{webr}
+ess_filtro_with_ipw |>
+  group_by(treatment) |>
+  summarise(
+    weighted_mean = weighted.mean(outcome, ipw),
+    n = n()
+  )
+```
+
+Podemos usar bootstrap para obtener bien la desviación estándar o usar un diseño  teniendo en cuenta esos pesos. La librería `survey` permite hacer eso obteniendo correctamente la desviación estándard.
 
 
 ```{webr}
@@ -402,11 +471,12 @@ svyby(~outcome, ~treatment, disenno, svymean)
 
 ```
 
-También podemos usar un modelo lineal, y nos evitamos hacer bootstrap usando la librería `survey`
+También podemos usar un modelo lineal  y nos evitamos hacer bootstrap usando la librería `survey`
+
 
 ```{webr}
 
-mod_svyglm <- svyglm(outcome ~ treatment , design = disenno)
+mod_svyglm <- svyglm(outcome ~ 0 + treatment , design = disenno)
 
 summary(mod_svyglm)
 
@@ -419,7 +489,12 @@ Que comparado con no usar ipw, vemos que da un efecto más pequeño, pero en el 
 
 
 ```{webr}
-summary(lm(outcome ~ 0 + treatment, data = ess_filtro_with_ipw))
+
+mod_sin_ipw <-  lm(outcome ~ 0 + treatment, data = ess_filtro_with_ipw)
+
+summary(mod_sin_ipw)
+
+
 
 ```
 
@@ -459,7 +534,11 @@ sjPlot::plot_model(mod_simple_2, type = "eff", terms = c("anoanti",  "treatment"
 IPW o condicionar por las variables de confusión mejoran la precisión. 
 
 
-# Anexo. 
+# Anexo 1. 
+
+TODO.  Ejemplo con datos de campaña de churn orange y alguna variable que pueda servir
+
+# Anexo 2.  
 
 En python
 
@@ -477,16 +556,71 @@ df = pd.read_csv("./data/ess_filtro.csv")
 
 ```
 
+Hay que tratar las variables categóricas como tales
+
 ```{pyodide}
+  
+categorical_vars = ['anos2', 'sexo', 'estrato2', 'tipojor']
+for var in categorical_vars:
+  df[var] = df[var].astype('category')
 
-model = smf.glm("treatment ~ anos2 + sexo + estrato2 + tipojor + anoanti", data = df, 
-                family = sm.families.Binomial())
 
+formula = "treatment ~ C(anos2) + C(sexo) + C(estrato2) + C(tipojor) + anoanti"
+
+# Fit the model
+model = smf.glm(formula, data=df, family=sm.families.Binomial())
 result = model.fit()
-result.summary()
-
-df['ps'] = result.fittedvalues.copy()
-df.head()
 
 ```
+
+
+
+```{pyodide}
+df['ps'] = result.fittedvalues.copy()
+df.head()
+```
+
+
+
+```{pyodide}
+# Calculate IPW weights
+df['ipw'] = np.where(
+    df['treatment'] == 1,
+    1 / df['ps'],
+    1 / (1 - df['ps'])
+)
+
+# Calculate weighted means by treatment group
+weighted_means = df.groupby('treatment').apply(
+    lambda x: pd.Series({
+        'weighted_mean': np.average(x['outcome'], weights=x['ipw']),
+        'count': len(x)
+    })
+)
+
+print(weighted_means)
+```
+
+
+Haciendo un modelo lineal ponderado se obtiene lo mismo. 
+Ojo. el stándard error no es correcto, habría que hacer bootstrap 
+
+```{pyodide}
+
+
+# Fit weighted linear model
+model_weighted = smf.wls('outcome ~  0 + C(treatment)', 
+                         data=df, 
+                         weights=df['ipw'])
+results_weighted = model_weighted.fit()
+
+print("\nWeighted linear model results:")
+print(results_weighted.summary().tables[1])
+```
+
+
+
+
+
+
 
